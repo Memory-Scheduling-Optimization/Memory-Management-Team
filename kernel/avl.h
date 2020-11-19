@@ -12,6 +12,7 @@ class avl_node {
     avl_node<T> *right;
     T data;
     uint32_t height;
+    friend class AVL;
 };
 
 template <typename T>
