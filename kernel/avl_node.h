@@ -8,12 +8,12 @@
 
 template <typename T>
 class avl_node {
-private:
+public:
     avl_node<T> *left;
     avl_node<T> *right;
     T data;
-public:
     int32_t height;
+    avl_node(T d) : data(d) {} 
 };
 
 #endif
