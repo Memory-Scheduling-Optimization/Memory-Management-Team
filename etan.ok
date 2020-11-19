@@ -1,0 +1,120 @@
+*** [init] argc = 1
+*** [init] argv[0] = init
+***
+*** ----- Bad System Calls ----- 
+*** [test 1] argc = 3
+*** [test 1] argv[0] = /sbin/bs
+*** [test 1] argv[1] = test 1
+*** [test 1] argv[2] = 0
+*** [test 1] syscall 20
+*** [test 1] syscall 0xffffffff
+*** [test 1] syscall 0xdeadbeef
+*** [test 1] syscall 14
+*** [test 1] result = 0
+***
+*** ----- Semaphores ----- 
+*** [test 2] argc = 4
+*** [test 2] argv[0] = /sbin/bs
+*** [test 2] argv[1] = test 2
+*** [test 2] argv[2] = 1
+*** [test 2] argv[3] = 3
+*** [test 2] a ... b ... c
+*** [test 2] a ... b ... c
+*** [test 2] a ... b ... c
+*** [test 2] a ... b ... c
+*** [test 2] a ... b ... c
+*** [test 2] a ... b ... c
+*** [test 2] a ... b ... c
+*** [test 2] a ... b ... c
+*** [test 2] result = 8
+***
+*** ----- Recursive execl ----- 
+*** [test 3] a = 4, b = 0
+*** [test 3] a = 3, b = 0
+*** [test 3] a = 2, b = 0
+*** [test 3] a = 1, b = 0
+*** [test 3] a = 1, b = 3
+*** [test 3] a = 2, b = 10
+*** [test 3] a = 1, b = 10
+*** [test 3] a = 1, b = 33
+*** [test 3] a = 3, b = 71
+*** [test 3] a = 2, b = 71
+*** [test 3] a = 1, b = 71
+*** [test 3] a = 1, b = 216
+*** [test 3] a = 2, b = 507
+*** [test 3] a = 1, b = 507
+*** [test 3] a = 1, b = 1524
+*** [test 3] result = 3049
+***
+*** ----- Files ----- 
+*** [test 4] argc = 6
+*** [test 4] argv[0] = /sbin/file
+*** [test 4] argv[1] = test 4
+*** [test 4] argv[2] = 26
+*** [test 4] argv[3] = /files/msg.txt
+*** [test 4] argv[4] = /files/none.txt
+*** [test 4] argv[5] = /files
+*** [test 4] abcdefghijklmnopqrstuvwxyz
+*** [test 4] wrote 27 bytes
+*** [test 4] size of /files/msg.txt is 25
+*** [test 4] reading /files/msg.txt
+*** [test 4] read 25 bytes
+*** [test 4] I can read from a file!
+*** [test 4] did not overwrite
+*** [test 4] wrote 56 bytes
+*** [test 4] seeked to 30
+*** [test 4] failed to read from offset 30
+*** [test 4] failed to open /files/msg.txt
+*** [test 4] failed to open /files/none.txt
+*** [test 4] opened /files/msg.txt
+*** [test 4] failed to open /files
+*** [test 4] result = 0
+***
+*** ----- Symlinks ----- 
+*** [test 5] argc = 3
+*** [test 5] argv[0] = /sbin/symlink
+*** [test 5] argv[1] = test 5
+*** [test 5] argv[2] = test
+*** [test 5] I can read from a file!
+*** [test 5] I can read from a file!
+*** [test 5] I can read from a file!
+*** [test 5] failed to open /files/link4
+*** [test 5] libc.c:27 read error
+*** [test 5] argc = 3
+*** [test 5] argv[0] = link5
+*** [test 5] argv[1] = test 5
+*** [test 5] argv[2] = exec
+*** [test 5] successfully executed from symbolic link
+*** [test 5] result = 0
+*** [test 5] failed to execute files/link2
+*** [test 5] result = -1
+*** [test 5] result = 0
+***
+*** ----- Memory Protection ----- 
+*** [test 6] argc = 2
+*** [test 6] argv[0] = /sbin/memory
+*** [test 6] argv[1] = test 6
+*** [test 6] process exited abnormally
+*** [test 6] process exited abnormally
+*** [test 6] process exited abnormally
+*** [test 6] process exited abnormally
+*** [test 6] process exited abnormally
+*** [test 6] process exited abnormally
+*** [test 6] process exited abnormally
+*** [test 6] process exited abnormally
+*** [test 6] protected kernel memory
+*** [test 6] protected IO APIC
+*** [test 6] protected local APIC
+*** [test 6] protected kernel memory
+*** [test 6] protected IO APIC
+*** [test 6] protected local APIC
+*** [test 6] argc = 4
+*** [test 6] argv[0] = /sbin/memory
+*** [test 6] argv[1] = test 6
+*** [test 6] protected data from previous programs
+*** [test 6] read
+*** [test 6] result = 0
+*** [test 6]  fro
+*** [test 6] result = 0
+***
+*** [init] last line

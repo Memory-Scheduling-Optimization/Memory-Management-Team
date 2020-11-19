@@ -1,0 +1,61 @@
+********************************************************************************
+I would add more, but I'm at the 100KB limit (excluding executables). I used
+
+user$ (cd <test>.dir/sbin; make clean; make noexec)
+user$ du -s -k <test>.dir
+100 <test>.dir
+
+to check. This is specific to my Makefile.
+
+********************************************************************************
+This test case tests:
+
+General:
+* we pass arguments correctly to user programs
+* nothing is executed after the shutdown system call
+* processes clean up after exiting
+
+Bad system calls:
+* we prevent the user from making illegal system calls
+* we don't crash or exit when we make an illegal system call
+
+Semaphores:
+* semaphores provide mutual exclusion
+
+Recursive execl:
+* processes clean up after exiting
+
+Files:
+* we can write multiple bytes at once to stdout
+* reading past the end of a file works normally
+* we can seek past the end of a file but not read afterwards
+* there is can be ten open files maximum per process
+* opening nonexistent files and directories fails
+
+Symlinks:
+* we can open files from symbolic links with relative paths
+* we can open files from symbolic links with absolute paths
+* we can open files from nested symbolic links
+* we fail to open infinitely nested symbolic links (set a constant depth)
+* we can execute files from symbolic links
+* execl will fail on non-executable files
+
+Memory protection:
+* we exit without crashing on attempts to write to kernel memory
+* we exit without crashing on attempts to read from kernel memory
+* system calls that try to expose kernel memory will fail
+* processes cannot access memory from previous programs
+* forked processes share file descriptors
+
+********************************************************************************
+Not tested, but good to ensure:
+
+* more complete file tests
+* more complete open/execl tests (missing files, broken symlinks)
+* more complete protection tests
+* test process state after fork/exec (state of memory/descriptors)
+* more stdin/out/err tests
+* (!) copy-on-write semantics in fork
+  try to get the test to run under 3 seconds!
+
+********************************************************************************
