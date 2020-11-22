@@ -2,6 +2,7 @@
  * avl.cc
  */
 
+
 #include "avl.h"
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
@@ -92,9 +93,24 @@ avl_node<T>* AVL<T>::best_fit_help(avl_node<T>* cur, T target) {
 }
 
 
+
+template <typename T>
+void AVL<T>::remove(T val) {
+    root = remove_help(root, val);
+    
+}
+
 /*
 template <typename T>
-T AVL<T>::remove(T val) {
-
+avl_node<T>* AVL<T>::remove_help(avl_node<T>* cur, T val) {
+    if (cur == NULLPTR) return NULLPTR;
+    if (val < cur->data) cur->left = remove_help(cur->left, val);
+    else if (val > cur->data) cur->right = remove_help(cur->right, val);
+    // o.w. it's a match
+    if (root->left == NULLPTR || root->right == NULLPTR) {
+        
+    }
 }
 */
+
+
