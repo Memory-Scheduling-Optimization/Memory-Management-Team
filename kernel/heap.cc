@@ -191,6 +191,10 @@ void addToFreeList(void* base) {
  */
 int sizeRemaining(void* base) {
     Header* temp_base = (Header*)base;
+    // Debug::printf("%x\n", ARENA_SIZE - ((int)(temp_base->this_arena_offset) & 0x3FFF));
+    if (((int)(temp_base->this_arena_offset) & 0x3FFF) == 0)
+        return 0;
+
     return ARENA_SIZE - ((int)(temp_base->this_arena_offset) & 0x3FFF);
 }
 
@@ -219,7 +223,7 @@ int* updateArena(int size) {
     /* Debug printing */
     // Debug::printf("Free list after num_alloc: %d, offset: %x\n", free_start_temp->num_allocated, 
     //                 free_start_temp->this_arena_offset);
-    // Debug::printf("malloc return: %x, size:%x\n\n", free_fit, *(free_fit - 1));
+    // Debug::printf("malloc return: %x, size:%x\n", free_fit, *(free_fit - 1));
         
     return free_fit;
 }
@@ -300,7 +304,7 @@ int* findFit(int size) {
 void updateFree(void* p) {
     // Check if p is already free
     if ((*(((int*)p) - 1) & 1) == 0) {
-        Debug::printf("WE HAVE A DOUBLE FREE");
+        Debug::printf("WE HAVE A DOUBLE FREE %x", p);
         return;
     }
     // Is allocated, update to be free
@@ -417,6 +421,9 @@ void free(void* p) {
     // if (p == (void*) array) return;
 
     LockGuardP g{theLock};
+
+    // if ((((uint32_t)p) & 0x3FFF) < 0xF)
+    //     Debug::printf("%x\n", p);
 
     updateFree(p);
     // int idx = ((((uintptr_t) p) - ((uintptr_t) array)) / 4) - 1;
