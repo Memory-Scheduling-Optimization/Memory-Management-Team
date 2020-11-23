@@ -78,6 +78,8 @@ void basicArenaTest(void) {
 
     free(temp2);
     free(temp);
+    
+    Debug::printf("\n");
 }
 
 void bulkArenaTest(void) {
@@ -92,11 +94,15 @@ void bulkArenaTest(void) {
     int failure = 0;
 
     for (int i = 0; i < num_arenas_remaining; i++) {
+        // Debug::printf("%d\n", i);
         temp_free_list[i] = (int*)malloc(maximum_malloc_size);
+        // Debug::printf("%x\n", temp_free_list[i]);
         if (temp_free_list[i] == nullptr) {
             failure++;
         }
     }
+
+    // Debug::printf("Failure number %d\n", failure);
 
     if (failure > 0) {
         Debug::printf("*** Bulk Arena Test failed with %d failures\n", failure);
@@ -114,4 +120,6 @@ void bulkArenaTest(void) {
         // Debug::printf("%x\n", temp_free_list[i]);
         free((void*)temp_free_list[i]);
     }
+
+    Debug::printf("\n");
 }

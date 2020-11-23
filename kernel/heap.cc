@@ -173,6 +173,7 @@ void addToFreeList(void* base) {
     int* temp_base = (int*)base;
     // If it is the only free arena, set free_start and free_end
     if (free_start == nullptr) {
+        // Debug::printf("Free start is nullptr\n");
         free_start = temp_base;
         free_end = temp_base;
     } 
@@ -317,10 +318,13 @@ void updateFree(void* p) {
         Header* arena_temp = ((Header*)((int)p & ~0x3FFF));
         arena_temp->num_allocated--;
 
+        // Debug::printf("%x %d\n", ((int)p & ~0x3FFF), arena_temp->num_allocated);
+
         ASSERT(arena_temp->num_allocated >= 0);
 
         // If arena completely empty, we add back to free list
         if (arena_temp->num_allocated == 0) {
+            arena_temp->this_arena_offset = (int*)arena_temp + 3;
             addToFreeList((void*)arena_temp);
         }
     }
