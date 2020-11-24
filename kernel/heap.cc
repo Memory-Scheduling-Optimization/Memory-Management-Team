@@ -11,127 +11,6 @@ static constexpr uint32_t HEAP_HEAP_SIZE = 5 * 1024 * 1024;
 static constexpr uint32_t ARENA_SIZE = 16 * 1024;
 
 namespace gheith {
-    
-// static int *array;
-// static int len;
-// static int safe = 0;
-// static int avail = 0;
-// static BlockingLock *theLock = nullptr;
-
-// void makeTaken(int i, int ints);
-// void makeAvail(int i, int ints);
-
-// int abs(int x) {
-//     if (x < 0) return -x; else return x;
-// }
-
-// int size(int i) {
-//     return abs(array[i]);
-// }
-
-// int headerFromFooter(int i) {
-//     return i - size(i) + 1;
-// }
-
-// int footerFromHeader(int i) {
-//     return i + size(i) - 1;
-// }
-    
-// int sanity(int i) {
-//     if (safe) {
-//         if (i == 0) return 0;
-//         if ((i < 0) || (i >= len)) {
-//             Debug::panic("bad header index %d\n",i);
-//             return i;
-//         }
-//         int footer = footerFromHeader(i);
-//         if ((footer < 0) || (footer >= len)) {
-//             Debug::panic("bad footer index %d\n",footer);
-//             return i;
-//         }
-//         int hv = array[i];
-//         int fv = array[footer];
-  
-//         if (hv != fv) {
-//             Debug::panic("bad block at %d, hv:%d fv:%d\n", i,hv,fv);
-//             return i;
-//         }
-//     }
-
-//     return i;
-// }
-
-// int left(int i) {
-//     return sanity(headerFromFooter(i-1));
-// }
-
-// int right(int i) {
-//     return sanity(i + size(i));
-// }
-
-// int next(int i) {
-//     return sanity(array[i+1]);
-// }
-
-// int prev(int i) {
-//     return sanity(array[i+2]);
-// }
-
-// void setNext(int i, int x) {
-//     array[i+1] = x;
-// }
-
-// void setPrev(int i, int x) {
-//     array[i+2] = x;
-// }
-
-// void remove(int i) {
-//     int prevIndex = prev(i);
-//     int nextIndex = next(i);
-
-//     if (prevIndex == 0) {
-//         /* at head */
-//         avail = nextIndex;
-//     } else {
-//         /* in the middle */
-//         setNext(prevIndex,nextIndex);
-//     }
-//     if (nextIndex != 0) {
-//         setPrev(nextIndex,prevIndex);
-//     }
-// }
-
-// void makeAvail(int i, int ints) {
-//     array[i] = ints;
-//     array[footerFromHeader(i)] = ints;    
-//     setNext(i,avail);
-//     setPrev(i,0);
-//     if (avail != 0) {
-//         setPrev(avail,i);
-//     }
-//     avail = i;
-// }
-
-// void makeTaken(int i, int ints) {
-//     array[i] = -ints;
-//     array[footerFromHeader(i)] = -ints;    
-// }
-
-// int isAvail(int i) {
-//     return array[i] > 0;
-// }
-
-// int isTaken(int i) {
-//     return array[i] < 0;
-// }
-
-// Garbage code wohoo
-// void makeFreeBlock(void* base, size_t bytes) {
-//     uint32_t* temp = (uint32_t*) base;
-//     temp[0] = bytes;
-//     temp[(bytes/4) - 1] = bytes;
-//     Debug::printf("Free block: %x\t%x\n", &temp[0], &temp[(bytes/4) - 1]);
-// }
 
 // Start of free list
 static int* free_start = nullptr;
@@ -240,29 +119,6 @@ int* findFit(int size) {
 
     // size fits inside of first free block
     if (size <= sizeRemaining((void*)free_start)) {
-        // Header* free_start_temp = (Header*)free_start;
-
-        // /* Debug printing */
-        // // Debug::printf("Aligned malloc size: %x\n", size);
-        // // Debug::printf("Free list before num_alloc: %d, offset: %x\n", free_start_temp->num_allocated, 
-        // //                 free_start_temp->this_arena_offset);
-
-        // // Increment num allocated
-        // free_start_temp->num_allocated++;
-        // // Mark block with size and as allocated
-        // *(free_start_temp->this_arena_offset) = size | 1;
-
-        // int* free_fit = free_start_temp->this_arena_offset + 1;
-
-        // /* Divide size by 4 since int* */
-        // free_start_temp->this_arena_offset += (((uint32_t)size)>>2);
-
-        // /* Debug printing */
-        // // Debug::printf("Free list after num_alloc: %d, offset: %x\n", free_start_temp->num_allocated, 
-        // //                 free_start_temp->this_arena_offset);
-        // // Debug::printf("malloc return: %x, size:%x\n\n", free_fit, *(free_fit - 1));
-        
-        // return free_fit;
         return updateArena(size);
     }
     // size does not fit inside first free block
@@ -278,19 +134,6 @@ int* findFit(int size) {
         
         // If next arena exists
         if (free_start != nullptr) {
-            // Header* free_start_temp_next = (Header*)free_start;
-
-            // // Increment num allocated
-            // free_start_temp_next->num_allocated++;
-            // // Mark block with size and as allocated
-            // *(free_start_temp_next->this_arena_offset) = size | 1;
-
-            // int* free_fit = free_start_temp_next->this_arena_offset + 1;
-
-            // /* Divide size by 4 since int* */
-            // free_start_temp_next->this_arena_offset += (((uint32_t)size)>>2);
-        
-            // return free_fit;
             return updateArena(size);
         } 
         // Next arena does not exist
@@ -325,6 +168,7 @@ void updateFree(void* p) {
         // If arena completely empty, we add back to free list
         if (arena_temp->num_allocated == 0) {
             arena_temp->this_arena_offset = (int*)arena_temp + 3;
+            arena_temp->next_arena = nullptr;
             addToFreeList((void*)arena_temp);
         }
     }
@@ -338,13 +182,6 @@ void heapInit(void* base, size_t bytes) {
     using namespace gheith;
 
     Debug::printf("| heap range 0x%x 0x%x\n",(uint32_t)base,(uint32_t)base+bytes);
-
-    /* can't say new becasue we're initializing the heap */
-    // array = (int*) base;
-    // len = bytes / 4;
-    // makeTaken(0,2);
-    // makeAvail(2,len-4);
-    // makeTaken(len-2,2);
 
     // Loop through entire heap and set up arenas
     for (uint32_t i = (uint32_t)base; i < (uint32_t)base+bytes; i += ARENA_SIZE) {
@@ -362,11 +199,6 @@ void* malloc(size_t bytes) {
 
     if (bytes == 0) return (void*) HEAP_HEAP_START;
 
-    // if (bytes == 0) return (void*) array;
-
-    // int ints = ((bytes + 3) / 4) + 2;
-    // if (ints < 4) ints = 4;
-
     LockGuardP g{theLock};
 
     // Align size and add 1 for size storage
@@ -378,45 +210,6 @@ void* malloc(size_t bytes) {
     }
 
     return (void*) findFit(alloc_size);
-    // void* res = 0;
-
-    // int mx = 0x7FFFFFFF;
-    // int it = 0;
-
-    // {
-    //     int countDown = 20;
-    //     int p = avail;
-    //     while (p != 0) {
-    //         if (!isAvail(p)) {
-    //             Debug::panic("block is not available in malloc %p\n",p);
-    //         }
-    //         int sz = size(p);
-
-    //         if (sz >= ints) {
-    //             if (sz < mx) {
-    //                 mx = sz;
-    //                 it = p;
-    //             }
-    //             countDown --;
-    //             if (countDown == 0) break;
-    //         }
-    //         p = next(p);
-    //     }
-    // }
-
-    // if (it != 0) {
-    //     remove(it);
-    //     int extra = mx - ints;
-    //     if (extra >= 4) {
-    //         makeTaken(it,ints);
-    //         makeAvail(it+ints,extra);
-    //     } else {
-    //         makeTaken(it,mx);
-    //     }
-    //     res = &array[it+1];
-    // }
-
-    // return res;
 }
 
 void free(void* p) {
@@ -430,30 +223,6 @@ void free(void* p) {
     //     Debug::printf("%x\n", p);
 
     updateFree(p);
-    // int idx = ((((uintptr_t) p) - ((uintptr_t) array)) / 4) - 1;
-    // sanity(idx);
-    // if (!isTaken(idx)) {
-    //     Debug::panic("freeing free block, p:%x idx:%d\n",(uint32_t) p,(int32_t) idx);
-    //     return;
-    // }
-
-    // int sz = size(idx);
-
-    // int leftIndex = left(idx);
-    // int rightIndex = right(idx);
-
-    // if (isAvail(leftIndex)) {
-    //     remove(leftIndex);
-    //     idx = leftIndex;
-    //     sz += size(leftIndex);
-    // }
-
-    // if (isAvail(rightIndex)) {
-    //     remove(rightIndex);
-    //     sz += size(rightIndex);
-    // }
-
-    // makeAvail(idx,sz);
 }
 
 

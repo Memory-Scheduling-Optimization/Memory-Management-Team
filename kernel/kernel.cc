@@ -28,18 +28,6 @@ void basicArenaTest(void);
 void bulkArenaTest(void);
 
 void kernelMain(void) {
-    // Ethan's old code
-
-    // {
-	// auto ide = Shared<Ide>::make(1);
-	// auto fs = Shared<Ext2>::make(ide);	
-	// auto init = fs->open(fs->root, initName);
-	// auto pcb = Shared<PCB>{new Process(fs)};
-	// thread(pcb, [=]() mutable { SYS::exec(init, "init", 0); });
-    // }
-    // // Debug::printf("init exited with status %d\n",
-    // // 		  pcb->process()->exit_status->get());
-    // stop();
 
     Debug::printf("*** Start of kernelMain()\n");
 
@@ -53,6 +41,7 @@ void kernelMain(void) {
     bulkArenaTest();
 
     Debug::printf("*** End of kernelMain()\n");
+    
 }
 
 void checkAlignment(void* p) {
@@ -78,7 +67,7 @@ void basicArenaTest(void) {
 
     free(temp2);
     free(temp);
-    
+
     Debug::printf("\n");
 }
 
