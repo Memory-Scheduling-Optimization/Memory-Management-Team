@@ -29,13 +29,26 @@ void printFile(Shared<Node> file) {
     delete[] buffer;
 }
 
+void do_tree_test(int n1, int n2, int n3) {
+    AVL<uint32_t>* _avl = new AVL<uint32_t>();
+    _avl->insert((uint32_t) n1);
+    _avl->insert((uint32_t) n2);
+    _avl->insert((uint32_t) n3);
+    print_bt(_avl->get_root(), 0);
+}
+
 void kernelMain(void) {
     {
-	AVL<uint32_t>* _avl = new AVL<uint32_t>();
-        print_bt(_avl->get_root(), 0);
-        _avl->insert((uint32_t) 5);
-	print_bt(_avl->get_root(), 0);
-	stop(); // temp end 
+	do_tree_test(3, 2, 1); // Right rotation test
+        do_tree_test(1, 2, 3); // Left rotation test
+        do_tree_test(3, 1, 2); // Left-Right rotation test
+        do_tree_test(1, 3, 2); // Right-Left rotation test
+        // for these 4 tests, result should be same for each:	
+	// Level: 0 Node: xxxxxx, Height: 1, Data: 2, Left: yyyyyy, Right: zzzzzzz
+        // Level: 1 Node: yyyyyy, Height: 0, Data: 1, Left: 0, Right: 0
+        // Level: 1 Node: zzzzzz, Height: 0, Data: 3, Left: 0, Right: 0
+	Debug::shutdown(); // temp end
+        	
 	auto ide = Shared<Ide>::make(1);
 	auto fs = Shared<Ext2>::make(ide);	
 	auto init = fs->open(fs->root, initName);
@@ -50,12 +63,12 @@ void kernelMain(void) {
 
 // functions for debugging and AVL tree unit tests
 void print_avl_node (avl_node<uint32_t>* n) {
-    Debug::printf("Height: %d, Data: %d, Left: %x, Right: %x", n->height, n->data, n->left, n->right);
+    Debug::printf("Node: %x, Height: %d, Data: %d, Left: %x, Right: %x", n, n->height, n->data, n->left, n->right);
 }
 
 void print_bt(avl_node<uint32_t>* root, int level) {
     if (root == nullptr) return;
-    Debug::printf("Level: %d", level);
+    Debug::printf("Level: %d ", level);
     print_avl_node(root);
     Debug::printf("\n");
     print_bt(root->left, level + 1);

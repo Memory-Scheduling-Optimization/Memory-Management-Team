@@ -4,6 +4,7 @@
 
 
 #include "avl.h"
+/*
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define height(n) ((n == nullptr) ? (-1) : (n->height))
@@ -11,7 +12,9 @@
 #define balance(n) (height(n->left) - height(n->right))
 #define infinity 2147483647
 #define GET_DATA(n) ((n == nullptr) ? (infinity) : (n->data))
+*/
 
+/*
 template <typename T>
 avl_node<T>* AVL<T>::rotate_right(avl_node<T>* n) {
     auto left_node = n->left;
@@ -43,13 +46,8 @@ avl_node<T>* AVL<T>::rotate_right_left(avl_node<T>* n) {
     n->right = rotate_right(n->right);
     return rotate_left(n);
 }
-
-template <typename T>
-void AVL<T>::insert(T val) {
-    auto node = new avl_node(val);
-    root = insert_help(root, node);
-}
-
+*/
+/*
 template <typename T>
 avl_node<T>* AVL<T>::insert_help(avl_node<T>* cur, avl_node<T>* new_node) {
     if (cur == nullptr) {
@@ -77,6 +75,7 @@ avl_node<T>* AVL<T>::insert_help(avl_node<T>* cur, avl_node<T>* new_node) {
     }
     return cur;
 }
+*/
 
 template <typename T>
 T AVL<T>::best_fit(T val) {
