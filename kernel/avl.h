@@ -11,7 +11,7 @@
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define height(n) ((n == nullptr) ? (-1) : (n->height))
 #define abs(x) ((x < 0) ? (-x) : (x))
-#define balance(n) (height(n->left) - height(n->right))
+#define balance(n) ((n == nullptr) ? (0) : (height(n->left) - height(n->right)))
 #define infinity 2147483647
 #define GET_DATA(n) ((n == nullptr) ? (infinity) : (n->data))
 
@@ -20,6 +20,7 @@ class AVL {
 private:
     avl_node<T> *root;
     uint32_t size;
+
     avl_node<T>* insert_help(avl_node<T>* cur, avl_node<T>* new_node) {
         if (cur == nullptr) {
             return new_node;        
@@ -46,7 +47,68 @@ private:
         }
         return cur;
     }
-    avl_node<T>* best_fit_help(avl_node<T>* cur, T target);
+
+    avl_node<T>* best_fit_help(avl_node<T>* cur, T target) {
+        if (cur == nullptr) return nullptr;
+        if (cur->data < target) return best_fit_help(cur->right, target); // too small so it doesn't work
+        if (cur->data > target) {
+	    avl_node<T>* a_try = best_fit_help(cur->left, target);
+            return (cur->data < GET_DATA(a_try)) ? (cur) : (a_try);
+	//	return (cur->data < GET_DATA(best_fit_help(cur->left, target))) ? (cur) : (cur->left); // current node works, but may be a better fit
+	}
+        return cur; // first found; perfect match 
+    }
+
+    avl_node<T>* remove_help(avl_node<T>* cur, T val) {
+        if (cur == nullptr) return nullptr;
+        if (val < cur->data) cur->left = remove_help(cur->left, val);
+        else if (val > cur->data) cur->right = remove_help(cur->right, val);
+        // o.w. it's a match
+	else {
+            if (cur->left == nullptr || cur->right == nullptr) {
+	        if (cur->left == nullptr && cur->right == nullptr) {
+		    free(cur);
+		    cur = nullptr;
+		} else {
+		    avl_node<T>* nonempty = (cur->left == nullptr) ? cur->right : cur->left;
+		    cur->data = nonempty->data; // we have to copy the contents of nonempty into cur
+		    cur->left = nonempty->left;
+		    cur->right = nonempty->right;
+		    cur->height = nonempty->height;
+		    free(nonempty);
+		}
+	    } else {
+	        // two children case
+		avl_node<T>* replacement = cur->right;
+
+		while (replacement->left != nullptr) { // get min value in cur's right subtree
+		    replacement = replacement->left;
+		}
+
+		cur->data = replacement->data;
+                cur->right = remove_help(cur->right, replacement->data); // recursive delete call needed
+	    }
+	}
+
+	if (cur == nullptr) return cur; // if cur now is nullptr, can just return
+	cur->height = 1+MAX(height(cur->left), height(cur->right));
+        const int thresh = 1; // threshold of 1 for now
+        if (balance(cur) > thresh) {
+            if (balance(cur->left) >= 0) {
+                cur = rotate_right(cur);
+             } else { // balance(cur->left) < 0
+                 cur = rotate_left_right(cur);
+             }
+        } else if (balance(cur) < -thresh) {
+            if (balance(cur->right) <= 0) {
+                cur = rotate_left(cur);
+            } else {
+                cur = rotate_right_left(cur);
+            }
+        }
+        return cur;
+    }
+
 public:
     AVL() { 
         root = nullptr;
@@ -60,8 +122,14 @@ public:
         root = insert_help(root, node);
     }
 
-    void remove(T val);
-    T best_fit(T val);
+    void remove(T val) {
+        root = remove_help(root, val);
+    }
+
+    T best_fit(T val) {
+        auto node = best_fit_help(root, val);
+	return (node == nullptr) ? T{} : node->data;
+    }
     avl_node<T>* rotate_right(avl_node<T>* n) {
         auto left_node = n->left;
         n->left = left_node->right;
@@ -89,7 +157,10 @@ public:
         n->right = rotate_right(n->right);
         return rotate_left(n);
     }
-    avl_node<T>* get_root() { return root; }
+
+    avl_node<T>* get_root() { 
+	    return root; 
+    }
 };
 
 
