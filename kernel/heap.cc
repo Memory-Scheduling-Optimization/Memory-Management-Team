@@ -174,6 +174,18 @@ void updateFree(void* p) {
     }
 }
 
+int freeListSpace() {
+    int total_space = 0;
+    int* curr_free_block = free_start;
+    // Loop through free list
+    while (curr_free_block != nullptr) {
+        total_space += sizeRemaining(curr_free_block);
+        // Go to next block
+        curr_free_block = (int*)*(curr_free_block + 2);
+    }
+    return total_space;
+}
+
 };
 
 
@@ -223,6 +235,12 @@ void free(void* p) {
     //     Debug::printf("%x\n", p);
 
     updateFree(p);
+}
+
+int spaceRemaining() {
+    using namespace gheith;
+    // Debug::printf("base method: %d\n",freeListSpace());
+    return freeListSpace();
 }
 
 

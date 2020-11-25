@@ -26,6 +26,7 @@ void printFile(Shared<Node> file) {
 
 void basicArenaTest(void);
 void bulkArenaTest(void);
+void calculateSpaceUsage(void);
 
 void kernelMain(void) {
 
@@ -33,15 +34,19 @@ void kernelMain(void) {
 
     // Test for basic functionality of malloc and free
     basicArenaTest();
+    // Debug::printf("%x\n", spaceRemaining());
 
     // Testing to make sure we can allocate everything we should be able to
     bulkArenaTest();
+    // Debug::printf("%x\n", spaceRemaining());
 
     // Do twice to make sure we are freeing properly
     bulkArenaTest();
+    // Debug::printf("%x\n", spaceRemaining());
+
+    calculateSpaceUsage();
 
     Debug::printf("*** End of kernelMain()\n");
-    
 }
 
 void checkAlignment(void* p) {
@@ -67,14 +72,12 @@ void basicArenaTest(void) {
 
     free(temp2);
     free(temp);
-
-    Debug::printf("\n");
 }
 
 void bulkArenaTest(void) {
     // In theory, there should be 1 fully allocated arena, 
     // 1 partially allocated, rest unallocated
-    Debug::printf("Bulk Arena Test started\n");
+    Debug::printf("\nBulk Arena Test started\n");
 
     int num_arenas_remaining = 5 * 64 - 2;
     int maximum_malloc_size = 16 * 1024 - 16;
@@ -109,6 +112,11 @@ void bulkArenaTest(void) {
         // Debug::printf("%x\n", temp_free_list[i]);
         free((void*)temp_free_list[i]);
     }
+}
 
-    Debug::printf("\n");
+void calculateSpaceUsage(void) {
+    double heap_size = 5 * 1024 * 1024;
+    // Debug::printf("calculate: %d\n", spaceRemaining());
+    double total_space_remaining = (double)spaceRemaining();
+    Debug::printf("Space Usage: %f%%\n", ((heap_size - total_space_remaining) / heap_size)* 100);
 }
