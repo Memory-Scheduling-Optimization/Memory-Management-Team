@@ -109,12 +109,23 @@ private:
         return cur;
     }
 
+    void destroy_tree(avl_node<T> *cur) {
+        if (cur == nullptr) return;
+	avl_node<T> *lhs = cur->left;
+	avl_node<T> *rhs = cur->right;
+	delete(cur);
+	destroy_tree(lhs);
+	destory_tree(rhs);
+    }
+
 public:
     AVL() { 
         root = nullptr;
 	size = 0;
     } 
-    ~AVL() {}
+    ~AVL() {
+        destroy_tree(root);
+    }
     AVL<T>& operator=(const AVL& rhs);
 
     void insert(T val) {
