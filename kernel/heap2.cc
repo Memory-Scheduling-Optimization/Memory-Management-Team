@@ -48,7 +48,6 @@ class HeaderRecord {
 	 bool operator ==(const HeaderRecord& h) {
              return data == h.data && location_ptr == h.location_ptr; 
          }
-
 };
 
 
