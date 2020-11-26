@@ -195,13 +195,15 @@ void heapInit(void* base, size_t bytes) {
         Header* middle_node = (Header*)heap_start;
         middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
         middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
-        middle_node->next_avail = middle_node; // circular doubly linked list
-	middle_node->prev_avail = middle_node;
-	avail_list = middle_node; // set the available list global variable as needed
+	middle_node->left_child = nullptr;
+        middle_node->right_child = nullptr;
+	middle_node->height = 0; // since it's a leaf of the tree
+	avail_list = middle_node; // set the root of the AVL tree  
     }
     //sanity_checker();
 }
 
+/*
 void add_to_avail_list(Header* node) { // add node to the avail linked list
     if (avail_list == nullptr) {
         avail_list = node;
@@ -234,85 +236,72 @@ void remove_from_avail_list(Header* node) {
         next -> prev_avail = prev;
 	prev -> next_avail = next;
 }
+*/
+void add_to_tree(Header* node) { 
+}
+
+void remove_from_tree(Header* node) {
+}
+
+Header* get_best_fit() {
+}
+
+
 
 void* malloc(size_t bytes) { //using best fit policy
     //Debug::printf("In malloc, bytes = %d \n", bytes);
-    heap_lock.lock();
+    LockGuardP g{heap_lock};
     //sanity_checker();
     //print_heap();
     bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
-    if (bytes == 4) {
-        bytes = 8; // for the minimum block size
+    if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
+        bytes = MIN_BLOCK_SIZE; // for the minimum block size, so round up 4 & 8 to 12.
     }
     if (bytes == 0) {// malloc(0) special case
-	heap_lock.unlock();
         return ptr_add(heap_end, 4); // returns out of bounds pointer.
     }
-    if (avail_list == nullptr){ // case where we know that there are no free nodes
-        heap_lock.unlock();
+    if (avail_list == nullptr) { // case where we know that there are no free nodes
 	return nullptr;
     }
-    if (bytes >= heap_size) { // because heap_size is actually an overestimation already (since header + footer)
-	heap_lock.unlock();
+    if (bytes > (heap_size - NODE_OVERHEAD)) { // because heap_size is actually an overestimation already (since header + footer)
         return nullptr;
     }
-    Header* current_node = avail_list;
-    Header* best_fit_node = nullptr;
-    int32_t best_size = __INT_MAX__; // since it's lowest size found
-    bool found_fit = false;
-    bool first_time = true;
-
-    while (first_time || current_node != avail_list) {
-	if (first_time)
-	    first_time = false;
-
-        if (abs(current_node->size_and_state) < best_size && abs(current_node -> size_and_state) >= (ssize_t)bytes) {
-	    found_fit = true;
-	    best_size = abs(current_node->size_and_state);
-            best_fit_node = current_node;
-            if (abs(current_node -> size_and_state) == (ssize_t)bytes) { // Perfect fit
-	        break;
-	    }
-	}
-	current_node = current_node -> next_avail;
-    }
-
-    if (found_fit && abs(best_fit_node -> size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
-        int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - 8; // leftover_bytes >= 8
+    //Header* current_node = avail_list;
+    Header* best_fit_node = get_best_fit();
+    if (best_fit_node == nullptr) return nullptr;
+    
+    if (abs(best_fit_node -> size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
+        int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - MIN_BLOCK_SIZE; 
+	ASSERT(leftover_bytes >= 8); // leftover_bytes >= 8, still, by algebra
+	// TODO
         Header* new_header = (Header*)ptr_add(best_fit_node->get_footer(), get_negative(bytes + 4)); // this indicates we malloc from RHS => no need to remove from available list
         new_header->size_and_state = bytes; // bytes > 0
         new_header->get_footer()->size_and_state = bytes;
-
+        
+	remove_from_tree(best_fit_node);
         best_fit_node->size_and_state = get_negative(leftover_bytes); // <-- v <= -4, so this node is still in the avail list so this works.
         best_fit_node->get_footer()->size_and_state = get_negative(leftover_bytes);
+	add_to_tree(best_fit_node);
         //print_heap();
-        heap_lock.unlock();
         return new_header->get_block(); // since new_header is pointing to the allocated portion
     }
-    else if (found_fit) { // case where exact fit or 4/8/12 extra bytes more than exact fit
+    else { // case where exact fit or 4/8/12/16 extra bytes more than exact fit
 	best_fit_node -> size_and_state *= -1; //indicate that it's now full
 	best_fit_node -> get_footer() -> size_and_state *= -1;
-	remove_from_avail_list(best_fit_node); // since it's no longer available
+	remove_from_tree(best_fit_node); // since it's no longer available
         //print_heap();
-	heap_lock.unlock();
         return best_fit_node->get_block();
     }
-    //sanity_checker();
-    //print_heap();
-    heap_lock.unlock();
-    return nullptr; // otherwise, no free nodes found i.e. no free space in the heap so malloc failed
 }
 
 void free(void* p) {
-    //MISSING();
-    heap_lock.lock();
+    LockGuardP g{heap_lock}; 
     //Debug::printf("In free, p = %x \n", p);
     //sanity_checker();
     //print_heap();
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
     if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing
-	heap_lock.unlock();
         return;
     }
 
@@ -320,7 +309,8 @@ void free(void* p) {
     Header* right_node = (node -> get_right_header() >= heap_end) ? nullptr : node->get_right_header(); // heap_end is a multiple of 4, we can't have a right node start from there
     bool is_first_case = false;
     bool is_second_case = false;
-
+     
+    //TODO 
     if (right_node != nullptr && !right_node -> is_allocated()) { // if right node is free
         is_first_case = true;
 	int32_t new_block_size = get_negative(abs(node -> size_and_state) + abs(right_node -> size_and_state) + 8);
