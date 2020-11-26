@@ -317,8 +317,7 @@ void* malloc(size_t bytes) { //using best fit policy
     if (abs(best_fit_node -> size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
         int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - MIN_BLOCK_SIZE; 
 	ASSERT(leftover_bytes >= 8); // leftover_bytes >= 8, still, by algebra
-	// TODO
-        Header* new_header = (Header*)ptr_add(best_fit_node->get_footer(), get_negative(bytes + 4)); // this indicates we malloc from RHS => no need to remove from available list
+        Header* new_header = (Header*)ptr_add(best_fit_node->get_footer(), get_negative(bytes + 4)); // this indicates we malloc from RHS
         new_header->size_and_state = bytes; // bytes > 0
         new_header->get_footer()->size_and_state = bytes;
         
@@ -351,35 +350,31 @@ void free(void* p) {
 
     Header* left_node = (node -> get_left_footer() < heap_start) ? nullptr : node->get_left_footer()->get_header();
     Header* right_node = (node -> get_right_header() >= heap_end) ? nullptr : node->get_right_header(); // heap_end is a multiple of 4, we can't have a right node start from there
-    bool is_first_case = false;
-    bool is_second_case = false;
-     
-    //TODO 
-    if (right_node != nullptr && !right_node -> is_allocated()) { // if right node is free
-        is_first_case = true;
-	int32_t new_block_size = get_negative(abs(node -> size_and_state) + abs(right_node -> size_and_state) + 8);
-	node -> size_and_state = new_block_size; // +8 because of the now removed header and footer
-	add_to_avail_list(node);
-	remove_from_avail_list(right_node);
-	right_node -> get_footer() -> size_and_state = new_block_size;
-    }
-
-    if (left_node != nullptr && !left_node -> is_allocated()) { // if left node is free
-	is_second_case = true;
-        if (is_first_case) { // if this is true => node has been added to the avail_list and hence must be removed
-	    remove_from_avail_list(node);
+    if (!left_node->is_allocated() || !right_node->is_allocated()) {
+        if (!left_node->is_allocated() && !right_node->is_allocated()) { // left and right nodes are free
+	    int32_t new_block_size = get_negative(abs(node->size_and_state) + abs(left_node->size_and_state) + 8 + abs(right_node->size_and_state) + 8);
+	    remove_from_tree(left_node);
+	    remove_from_tree(right_node);
+            left_node->size_and_state = new_block_size;
+	    right_node->get_footer()->size_and_state = new_block_size;
+	    add_to_tree(left_node);
+	    return;
 	}
-        // since left_node is free, => it's already in the avail_list.
-	int32_t new_block_size = get_negative(abs(node -> size_and_state) + abs(left_node -> size_and_state) + 8);
-        left_node -> size_and_state = new_block_size; // +8 because of the now removed header and footer
-        node -> get_footer() -> size_and_state = new_block_size;
+	Header* leftmost = (!left_node->is_allocated()) ? left_node : node;
+	Header* rightmost = (!right_node->is_allocated()) ? right_node : node;
+	ASSERT((leftmost == node || rightmost == node) && !(leftmost == node && rightmost == node)); //exactly one of them is node
+	Header* not_node = (leftmost == node) ? (rightmost) ? (leftmost); // the one that isn't node
+        int32_t new_block_size = get_negative(abs(leftmost->size_and_state) + abs(rightmost->size_and_state) + 8);
+        remove_from_tree(not_node);
+        leftmost->size_and_state = new_block_size;
+        rightmost->get_footer()->size_and_state = new_block_size;
+        add_to_tree(leftmost);
+        return;	
     }
-
-    if (!is_first_case && !is_second_case) { // if left node was not free and right node was not free
-        add_to_avail_list(node);
-        node -> size_and_state *= -1;
-        node -> get_footer() -> size_and_state *= -1;
-    }
+    // o.w. right is allocated and left is allocated
+    add_to_tree(node);
+    node->size_and_state *= -1; // negative number is free anyways
+    node->get_footer()->size_and_state *= -1;
     //sanity_checker();
     //print_heap();
 }
