@@ -11,6 +11,8 @@
 #define height(n) ((n == nullptr) ? (-1) : (n->height))
 #define balance(n) ((n == nullptr) ? (0) : (height(n->left_child) - height(n->right_child)))
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
+#define infinity 2147483647
+#define GET_DATA(n) ((n == nullptr) ? (infinity) : (n->get_block_size()))
 
 struct Header;
 struct Footer;
@@ -231,6 +233,16 @@ void remove_from_tree(Header* node) {
 Header* get_best_fit (size_t val) {
 	Header* h = best_fit_help(avail_list, val);
 	return h; // could be nullptr
+}
+
+Header* best_fit_help(Header* cur, size_t target) {
+    if (cur == nullptr) return nullptr;
+    if (cur->get_block_size() < target) return best_fit_help(cur->right_child, target); // too small so it doesn't work
+    if (cur->get_block_size() > target) {
+        Header* a_try = best_fit_help(cur->left_child, target);
+        return (cur->get_block_size() < GET_DATA(a_try)) ? (cur) : (a_try);
+    }
+    return cur; // first found; perfect match
 }
 
 Header* insert_help(Header* cur, Header* node) {
