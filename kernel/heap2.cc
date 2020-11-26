@@ -8,6 +8,10 @@
 #include "atomic.h"
 #include "blocking_lock.h"
 
+#define height(n) ((n == nullptr) ? (-1) : (n->height))
+#define balance(n) ((n == nullptr) ? (0) : (height(n->left_child) - height(n->right_child)))
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+
 struct Header;
 struct Footer;
 
@@ -64,18 +68,6 @@ struct Header {
 
     inline void* get_block() {
         return ptr_add((void*)this,sizeof(size_and_state)); //sizeof(size_and_state) = 4 bytes
-    }
-
-    inline Header* get_left_child() {
-        return (Header*)ptr_add(get_block(), 0);
-    }
-
-    inline int32_t get_height() {
-        return height; // can be -1, 0, 1, ...
-    }
-
-    inline Header* get_right_child() {
-        return (Header*)ptr_add(get_block(), 8);
     }
 
     inline Footer* get_footer() {
@@ -160,28 +152,6 @@ void sanity_checker() {
 	}
 	current_node = current_node -> get_right_header(); // next node in the heap
     }
-
-    current_node = avail_list;
-    if (current_node == nullptr) {
-	if (num_free_nodes != 0) {
-            Debug::panic("Heap has %d free nodes but the avail list has 0 free nodes in it.", num_free_nodes);
-	}
-    }
-    else {
-	bool first_time = true;
-        int num_nodes_in_avail_list = 0;
-
-        while (first_time || current_node != avail_list) {
-	    if (first_time) {
-	        first_time = false;
-	    }
-            num_nodes_in_avail_list++;
-            current_node = current_node -> next_avail;
-	}
-        if (num_nodes_in_avail_list != num_free_nodes) {
-	    Debug::panic("Heap has %d free nodes but the avail list has %d free nodes in it.", num_free_nodes, num_nodes_in_avail_list);
-	}
-    }
 }
 
 void heapInit(void* base, size_t bytes) { 
@@ -203,50 +173,112 @@ void heapInit(void* base, size_t bytes) {
     //sanity_checker();
 }
 
-/*
-void add_to_avail_list(Header* node) { // add node to the avail linked list
-    if (avail_list == nullptr) {
-        avail_list = node;
-        node -> next_avail = node;
-        node -> prev_avail = node;
-    }
-    else {
-	Header* other_node = avail_list;
-	Header* other_prev_node = other_node -> prev_avail;
-        node -> next_avail = other_node;
-        node -> prev_avail = other_prev_node;
-        other_prev_node -> next_avail = node;
-	other_node -> prev_avail = node;
-    }
+Header* rotate_right(Header* n) {
+    auto left_node = n->left_child;
+    n->left_child = left_node->right_child;
+    left_node->right_child = n;
+    n->height = 1+MAX(height(n->left_child), height(n->right_child));
+    left_node->height = 1+MAX(height(left_node->left_child), height(left_node->right_child));
+    return left_node;
 }
 
-void remove_from_avail_list(Header* node) {
-	if (avail_list == nullptr) // empty list case. Note, this should never happen
-	    return;
-	if (node -> next_avail == node) { // one node case
-	    avail_list = nullptr;
-	    return;
-	}
-
-	if (node == avail_list) { // to make sure that avail_list is point to an actually free nide
-            avail_list = avail_list -> next_avail;
-	}
-	Header* next = node -> next_avail;
-	Header* prev = node -> prev_avail;
-        next -> prev_avail = prev;
-	prev -> next_avail = next;
+Header* rotate_left(Header* n) {
+    auto right_node = n->right_child;
+    n->right_child = right_node->left_child;
+    right_node->left_child = n;
+    n->height = 1+MAX(height(n->left_child), height(n->right_child));
+    right_node->height = 1+MAX(height(right_node->left_child), height(right_node->right_child));
+    return right_node;
 }
-*/
-void add_to_tree(Header* node) { 
+
+Header* rotate_left_right(Header* n) {
+    n->left_child = rotate_left(n->left_child);
+    return rotate_right(n);
+}
+
+Header* rotate_right_left(Header* n) {
+    n->right_child = rotate_right(n->right_child);
+    return rotate_left(n);
+}
+
+Header* adjust(Header* cur) {
+    cur->height = 1+MAX(height(cur->left_child), height(cur->right_child));
+    const int thresh = 1; // threshold of 1 for now
+    if (balance(cur) > thresh) {
+        if (balance(cur->left) >= 0) {
+            cur = rotate_right(cur);
+         } else { // balance(cur->left) < 0
+             cur = rotate_left_right(cur);
+         }
+    } else if (balance(cur) < -thresh) {
+        if (balance(cur->right) <= 0) {
+            cur = rotate_left(cur);
+        } else {
+            cur = rotate_right_left(cur);
+        }
+    }
+    return cur;
+}
+
+void add_to_tree(Header* node) {
+    avail_list = insert_help(avail_list, node);	
 }
 
 void remove_from_tree(Header* node) {
+    avail_list = remove_help(avail_list, node);
 }
 
-Header* get_best_fit() {
+Header* get_best_fit (size_t val) {
+	Header* h = best_fit_help(avail_list, val);
+	return h; // could be nullptr
+}
+
+Header* insert_help(Header* cur, Header* node) {
+    if (cur == nullptr) {
+        return node;
+    }
+    if (node->get_block_size() < cur->get_block_size()) {
+        cur->left_child = insert_help(cur->left_child, node); // recursive call
+    } else {
+        cur->right_child = insert_help(cur->right_child, node); // recursive call
+    }
+    return adjust(cur);
 }
 
 
+Header* remove_help(Header* cur, Header* node) {
+        if (cur == nullptr) return nullptr;
+	// val replaced with node->get_block_size() OR node
+	// cur->data replaced with cur->get_block_size()
+	// cur->left replaced with cur->left_child
+	// cur->right replaced with cur->right_child
+	// cur->height is still cur->height
+        if (node->get_block_size() < cur->get_block_size()) cur->left_child = remove_help(cur->left_child, node);
+        else if (node->get_block_size() > cur->get_block_size()) cur->right = remove_help(cur->right, node);
+        // o.w. it's a match
+        else {
+            if (cur->left_child == nullptr || cur->right_child == nullptr) {
+                if (cur->left_child == nullptr && cur->right_child == nullptr) {
+                    cur = nullptr;
+                } else {
+                    Header* nonempty = (cur->left_child == nullptr) ? cur->right_child : cur->left_child;
+                    cur = nonempty; // gonna update parent's pointers since it returns cur from this function
+                }
+            } else {
+                // two children case
+                Header* replacement = cur->right_child;
+                
+                while (replacement->left_child != nullptr) { // get min value in cur's right subtree
+                    replacement = replacement->left_child;
+                }
+                cur = replacement;
+		cur->right_child = remove_help(cur->right_child, replacement); // recursive call to remove replacement from the right subtree 
+            }
+        }
+
+        if (cur == nullptr) return cur; // if cur now is nullptr, can just return
+        return adjust(cur);
+}
 
 void* malloc(size_t bytes) { //using best fit policy
     //Debug::printf("In malloc, bytes = %d \n", bytes);
@@ -267,7 +299,7 @@ void* malloc(size_t bytes) { //using best fit policy
         return nullptr;
     }
     //Header* current_node = avail_list;
-    Header* best_fit_node = get_best_fit();
+    Header* best_fit_node = get_best_fit(bytes);
     if (best_fit_node == nullptr) return nullptr;
     
     if (abs(best_fit_node -> size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
@@ -338,7 +370,6 @@ void free(void* p) {
     }
     //sanity_checker();
     //print_heap();
-    heap_lock.unlock();
 }
 
 
