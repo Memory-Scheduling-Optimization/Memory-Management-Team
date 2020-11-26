@@ -23,6 +23,7 @@ private:
 
     avl_node<T>* insert_help(avl_node<T>* cur, avl_node<T>* new_node) {
         if (cur == nullptr) {
+	    size++;
             return new_node;        
         }
         if (new_node->data < cur->data) {
@@ -77,6 +78,7 @@ private:
 		    cur->height = nonempty->height;
 		    free(nonempty);
 		}
+		size--;
 	    } else {
 	        // two children case
 		avl_node<T>* replacement = cur->right;
@@ -125,6 +127,8 @@ public:
     } 
     ~AVL() {
         destroy_tree(root);
+	size = 0;
+	root = nullptr;
     }
     AVL<T>& operator=(const AVL& rhs);
 
