@@ -270,7 +270,7 @@ Header* remove_help(Header* cur, Header* node) {
         // o.w. it's a match
         else {
             if (cur->left_child == nullptr || cur->right_child == nullptr) {
-                if (cur->left_child == nullptr && cur->right_child == nullptr) {
+                if (cur->left_child == nullptr && cur->right_child == nullptr) { // leaf case
                     cur = nullptr;
                 } else {
                     Header* nonempty = (cur->left_child == nullptr) ? cur->right_child : cur->left_child;
@@ -283,8 +283,10 @@ Header* remove_help(Header* cur, Header* node) {
                 while (replacement->left_child != nullptr) { // get min value in cur's right subtree
                     replacement = replacement->left_child;
                 }
-                cur = replacement;
-		cur->right_child = remove_help(cur->right_child, replacement); // recursive call to remove replacement from the right subtree 
+                cur->right_child = remove_help(cur->right_child, replacement); // recursive call to remove replacement from the right subtree 
+		replacement->right_child = cur->right_child;
+		replacement->left_child = cur->left_child;
+                cur = replacement; // for updating cur's parent's pointer to cur to now point to replacement
             }
         }
 
