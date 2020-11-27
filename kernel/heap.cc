@@ -2,7 +2,7 @@
  * heap
  */
 
-#include "heap2.h"
+#include "heap.h"
 #include "debug.h"
 #include "stdint.h"
 #include "atomic.h"
@@ -134,35 +134,17 @@ void sanity_checker() {
 	    print_heap();
 	    Debug::panic("Node is outside heap bounds (%p)", current_node);
 	}
-	else if (current_node -> get_right_header() <= current_node) {
+	else if (current_node->get_right_header() <= current_node) {
 	    print_heap();
 	    Debug::panic("Cycle found (%p)", current_node);
         }
-        else if (current_node -> size_and_state == 0 || current_node -> size_and_state == 4 || current_node -> size_and_state == -4 || current_node -> size_and_state == 8 || current_node -> size_and_state == -8) {
+        else if (current_node->size_and_state == 0 || current_node->size_and_state == 4 || current_node->size_and_state == -4 || current_node->size_and_state == 8 || current_node->size_and_state == -8) {
 	    print_heap();
             Debug::panic("Node with size_and_state = %d (this is not allowed) was found at (%p)!", current_node -> size_and_state, current_node);
 	}
-	current_node = current_node -> get_right_header(); // next node in the heap
+	current_node = current_node->get_right_header(); // next node in the heap
     }
-}
-
-void heapInit(void* base, size_t bytes) { 
-    heap_lock = new BlockingLock(); 
-    heap_start = round_up_mult_four(base);
-    heap_size = round_down_mult_four(bytes);
-    //Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
-    heap_end = ptr_add((void*) heap_start, heap_size);
-
-    if (heap_size >= MIN_NODE_SIZE) { // if there is room for anything in the heap
-        Header* middle_node = (Header*)heap_start;
-        middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
-        middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
-	middle_node->left_child = nullptr;
-        middle_node->right_child = nullptr;
-	middle_node->height = 0; // since it's a leaf of the tree
-	avail_list = middle_node; // set the root of the AVL tree  
-    }
-    //sanity_checker();
+    //TODO function to print out tree from availlist
 }
 
 Header* rotate_right(Header* n) {
@@ -277,6 +259,9 @@ Header* get_best_fit (int32_t val) {
 }
 
 void add_to_tree(Header* node) {
+    node->left_child = nullptr;
+    node->right_child = nullptr;
+    node->height = 0;
     avail_list = insert_help(avail_list, node);
 }
 
@@ -284,12 +269,28 @@ void remove_from_tree(Header* node) {
     avail_list = remove_help(avail_list, node);
 }
 
+void heapInit(void* base, size_t bytes) {
+    heap_start = round_up_mult_four(base);
+    heap_size = round_down_mult_four(bytes);
+    Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
+    heap_end = ptr_add((void*) heap_start, heap_size);
+
+    if (heap_size >= MIN_NODE_SIZE) { // if there is room for anything in the heap
+        Header* middle_node = (Header*)heap_start;
+        middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
+        middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
+        add_to_tree(middle_node);
+    }
+    print_heap();
+    sanity_checker();
+    heap_lock = new BlockingLock();
+}
 
 void* malloc(size_t bytes) { //using best fit policy
-    //Debug::printf("In malloc, bytes = %d \n", bytes);
+    Debug::printf("In malloc, bytes = %d \n", bytes);
     LockGuardP g{heap_lock};
-    //sanity_checker();
-    //print_heap();
+    sanity_checker();
+    print_heap();
     bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
     if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
         bytes = MIN_BLOCK_SIZE; // for the minimum block size, so round up 4 & 8 to 12.
@@ -305,27 +306,31 @@ void* malloc(size_t bytes) { //using best fit policy
     }
     //Header* current_node = avail_list;
     Header* best_fit_node = get_best_fit((int32_t) bytes);
+    Debug::printf("bytes: %d, got best fit: %p and it has footer: %p\n", bytes, best_fit_node, best_fit_node->get_footer());
     if (best_fit_node == nullptr) return nullptr;
     
-    if (abs(best_fit_node -> size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
-        int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - MIN_BLOCK_SIZE; 
+    if (abs(best_fit_node->size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
+        int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - 8;
 	ASSERT(leftover_bytes >= 8); // leftover_bytes >= 8, still, by algebra
+	Debug::printf("leftover_bytes: %d\n", leftover_bytes);
         Header* new_header = (Header*)ptr_add(best_fit_node->get_footer(), get_negative(bytes + 4)); // this indicates we malloc from RHS
         new_header->size_and_state = bytes; // bytes > 0
         new_header->get_footer()->size_and_state = bytes;
         
 	remove_from_tree(best_fit_node);
-        best_fit_node->size_and_state = get_negative(leftover_bytes); // <-- v <= -4, so this node is still in the avail list so this works.
+        best_fit_node->size_and_state = get_negative(leftover_bytes); 
         best_fit_node->get_footer()->size_and_state = get_negative(leftover_bytes);
 	add_to_tree(best_fit_node);
-        //print_heap();
+	sanity_checker();
+        print_heap();
         return new_header->get_block(); // since new_header is pointing to the allocated portion
     }
     else { // case where exact fit or 4/8/12/16 extra bytes more than exact fit
 	best_fit_node -> size_and_state *= -1; //indicate that it's now full
 	best_fit_node -> get_footer() -> size_and_state *= -1;
 	remove_from_tree(best_fit_node); // since it's no longer available
-        //print_heap();
+	sanity_checker();
+        print_heap();
         return best_fit_node->get_block();
     }
 }
