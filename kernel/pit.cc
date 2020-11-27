@@ -138,9 +138,9 @@ void Pit::init() {
 extern "C" void apitHandler(uint32_t* things) {
     // interrupts are disabled.
     auto id = SMP::me();
-    if (id == 0) {
+    //if (id == 0) {
         Pit::jiffies ++;
-    }
+    //}
     SMP::eoi_reg.set(0);
     auto me = gheith::activeThreads[id];
     if ((me == nullptr) || (me->isIdle) || (me->saveArea.no_preempt)) return;
