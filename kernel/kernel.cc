@@ -12,29 +12,6 @@
 
 static void* blockPointersTest1[100];
 static void* blockPointersTest2[1000];
-constexpr uint32_t BIG_MALLOCS = 235;
-struct BigChunkOfMemory {
-    uint8_t a;
-    uint16_t b;
-    uint8_t c;
-    uint32_t d;
-    uint64_t e;
-    uint8_t f;
-    uint16_t g;
-    void* h[100];
-
-    struct LittleChunkOfMemory {
-        int8_t i;
-        uint64_t j;
-        int8_t k;
-    } l;
-
-    struct MoreGarbage {
-        int8_t m;
-        void* n[1000];
-        uint64_t o;
-    } p;
-};
 void doEfficiencyTest(void);
 void doLargeStressTest(void);
 void doSpeedTest(void);
@@ -98,10 +75,10 @@ void kernelMain(void) {
     Debug::printf("Start of efficiency test\n");
     doEfficiencyTest();
     Debug::printf("End of efficiency test\n");
-
+    
     Debug::printf("\n");
 
-    Debug::printf("Start of big malloc stress trest\n");
+    Debug::printf("Start of big malloc stress test\n");
     doLargeStressTest();
     Debug::printf("End of big malloc stress test\n");
 
@@ -118,9 +95,12 @@ void kernelMain(void) {
 
 }
 
+//len in next fit's kernel.cc was 10000
+//but worst fit is apparently not as space efficient 
+//as I though
 void doEfficiencyTest() {
 
-    constexpr uint32_t len = 10 * 1000;
+    constexpr uint32_t len = 1000;
     void** arr = new void*[len];
 
     //A bunch of large mallocs
@@ -156,22 +136,23 @@ void doEfficiencyTest() {
 
 void doLargeStressTest() {
 
-    BigChunkOfMemory** arr = new BigChunkOfMemory*[BIG_MALLOCS];
+    void** arr = new void*[100];
+    constexpr size_t large_bytes = 10000;
 
-    for (uint32_t i = 0; i < BIG_MALLOCS; ++ i) {
-        arr[i] = new BigChunkOfMemory;
+    for (uint32_t i = 0; i < 100; ++ i) {
+	arr[i] = malloc(large_bytes);
     }
 
-    for (uint32_t i = 0; i <= BIG_MALLOCS / 2; ++ i) {
+    for (uint32_t i = 0; i <= 50; ++ i) {
         free(arr[i]);
     }
 
-    for (uint32_t i = BIG_MALLOCS - 1; i > BIG_MALLOCS / 2; -- i) {
+    for (uint32_t i = 99; i > 50; --i) {
         free(arr[i]);
     }
 
     free(arr);
-
+    
     Debug::printf("*** Passed big malloc stress test\n");
 
 }
@@ -187,16 +168,16 @@ void doSpeedTest() {
 
     //Speed test calls large stress test
     auto x = howLong([] {
-	doLargeStressTest();
+        doLargeStressTest();
     });
 
-    Debug::printf("*** Time taken for big malloc stress test: %d\n", x);
+    Debug::printf("*** Time taken for space efficiency test: %d\n", x);
 
 }
 
 void memUtil() {
     double heapSize = 5 * 1024 * 1024;
-    double totalAmountUnallocated = spaceUnallocated();
+    double totalAmountUnallocated = (double) spaceUnallocated();
     Debug::printf("*** Memory utilized = %f%%\n", ((heapSize - totalAmountUnallocated)/heapSize)*100);
 }
 

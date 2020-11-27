@@ -6,7 +6,7 @@
 
 /***********************************/
 /* ASSUMPTIONS			   */
-/* 1) Next fit allocation          */
+/* 1) Worst fit allocation         */
 /* 2) Explicit list of free blocks */
 /* 3) Coalescing done during free  */
 /***********************************/
@@ -91,8 +91,6 @@ namespace rdanait {
 
 	//ptr to header of first free node in the list
 	Header* freeListPtr = nullptr;
-	//Next fit rover
-	Header* rover;
 	//ptr to start of the heap
 	void* heapPtr = nullptr;
 	//heap size
@@ -162,7 +160,6 @@ void heapInit(void* start, size_t bytes) {
     freeListPtr -> nextNode = nullptr;
     //Make sure to put the size in the footer as well
     freeListPtr -> getFooter() -> sizeOfNode = freeListPtr -> sizeOfNode;
-    rover = freeListPtr;
     theLock = new BlockingLock();
 }
 
@@ -180,73 +177,57 @@ void* malloc(size_t bytes) {
 	int words = convertByteToWord(bytes, 4);
 	if (words < 2) words = 2;
 
-	Header* oldRover = rover;
-	//need to search through the free list for a free node using next fit algorithm
-	//search from rover to end of list
-	while(rover != nullptr) {
-            if(abs(rover -> sizeOfNode) - 2 >= words) {
-                //Now we check how big it is, so we can see if we need to allocate the whole node
-		//because the user won't be able to tell the difference
-		if(abs(rover -> sizeOfNode) - 8 <= words) {
-	            //negate the size in the header and footer, since it is now allocated
-		    rover -> sizeOfNode *= -1;
-	            rover -> getFooter() -> sizeOfNode *= -1;
-		    //remove from the free nodes list
-		    removeFreeNode(rover);
-		    //return a ptr to the node
-		    return ptr_add<void>(rover, 4);
-		}
-		else {
-		    //Else, we should split this node up
-		    //we need to update the size of the free node now
-		    rover -> sizeOfNode = -(abs(rover -> sizeOfNode) - words - 2);
-		    //update the footer's size as well
-		    rover -> getFooter() -> sizeOfNode = rover -> sizeOfNode;
-		    //Right node header size needs to update
-		    rover -> getRightHeader() -> sizeOfNode = words + 2;
-		    //Right node footer size also needs to be updated
-		    rover -> getRightHeader() -> getFooter() -> sizeOfNode = words + 2;
-		    //return a ptr to new node
-		    return ptr_add<void>(rover -> getRightHeader(), 4);
-		}
-	    }
-    	    //This node doesn't have a large enough size, let's try the next one
-	    rover = rover -> nextNode;
-        }
-	//If we couldn't find a node after the rover, search from beginning to rover
-        rover = freeListPtr;
-	while(rover != oldRover) {
-	    if(abs(rover -> sizeOfNode) - 2 >= words) {         
-                //Now we check how big it is, so we can see if we need to allocate the whole node
-                //because the user won't be able to tell the difference
-                if(abs(rover -> sizeOfNode) - 8 <= words) {
-                    //negate the size in the header and footer, since it is now allocated
-                    rover -> sizeOfNode *= -1;
-                    rover -> getFooter() -> sizeOfNode *= -1;
-                    //remove from the free nodes list
-                    removeFreeNode(rover);
-                    //return a ptr to the node
-                    return ptr_add<void>(rover, 4);
-                }       
-                else {  
-                    //Else, we should split this node up
-                    //we need to update the size of the free node now
-                    rover -> sizeOfNode = -(abs(rover -> sizeOfNode) - words - 2);
-                    //update the footer's size as well
-                    rover -> getFooter() -> sizeOfNode = rover -> sizeOfNode;
-                    //Right node header size needs to update
-                    rover -> getRightHeader() -> sizeOfNode = words + 2;
-                    //Right node footer size also needs to be updated
-                    rover -> getRightHeader() -> getFooter() -> sizeOfNode = words + 2;
-                    //return a ptr to new node
-                    return ptr_add<void>(rover -> getRightHeader(), 4);
-                }       
-            }   
-            //This node doesn't have a large enough size, let's try the next one
-            rover = rover -> nextNode;
-        }
+        Header* worst = nullptr;
 
-        return nullptr;
+        if(freeListPtr != nullptr) {
+	    Header* newFreeNode = freeListPtr;
+	    //need to search through the free list for a free node using worst fit algorithm 
+	    while(newFreeNode != nullptr) {
+		//We found a free node that's size is big enough
+		if(abs(newFreeNode -> sizeOfNode) - 2 >= words) {
+	            //First possible match is of course the current worst match
+		    if(worst == nullptr) {
+			worst = newFreeNode;
+	            }
+	            else { 
+      	                //we found a match earlier
+		        //only change if current free node is actually worse than worst
+		        if(abs(worst -> sizeOfNode) < abs(newFreeNode -> sizeOfNode)) {
+		            worst = newFreeNode;
+	                }
+	            }
+	        }
+		//This node doesn't have a large enough size, let's try the next one
+		newFreeNode = newFreeNode -> nextNode;
+	    }
+	}
+	if(worst == nullptr) return nullptr; //can just return now if we didn't find a worst node 
+	else {
+            //We have to split the node up
+	    if(abs(worst -> sizeOfNode) >= words + 8) {
+		//we need to update the size of the free node now
+                worst -> sizeOfNode = -(abs(worst -> sizeOfNode) - words - 2);
+                //update the footer's size as well
+                worst -> getFooter() -> sizeOfNode = worst -> sizeOfNode;
+                //Right node header size needs to update
+                worst -> getRightHeader() -> sizeOfNode = words + 2;
+                //Right node footer size also needs to be updated
+                worst -> getRightHeader() -> getFooter() -> sizeOfNode = words + 2;
+                //return a ptr to new node
+                return ptr_add<void>(worst -> getRightHeader(), 4);
+	    }
+            else {
+                //negate the size in the header and footer, since it is now allocated
+                worst -> sizeOfNode *= -1;
+                worst -> getFooter() -> sizeOfNode *= -1;
+                //remove from the free nodes list
+                removeFreeNode(worst);
+                //return a ptr to the node
+                return ptr_add<void>(worst, 4);	
+	    }
+	}
+
+	return nullptr;
 }
 
 void free(void* p) {
@@ -296,9 +277,6 @@ void free(void* p) {
     if (((char*) headerOfP) > ((char*) heapPtr) && headerOfP -> getLeftHeader() -> isThisNodeFree()) {
 		combineWithRightNode(headerOfP -> getLeftHeader());
     }
-    //Let's check to make sure rover isn't in the middle of a coalesced block; if it is
-    //just set it to the beginning of the coalesced block
-    if((char*) rover > (char*) headerOfP && (char*) rover < (char*)(headerOfP -> getRightHeader())) rover = headerOfP;
 
 }
 
@@ -310,6 +288,7 @@ int spaceUnallocated() {
 	totSpace += abs(currentFreeNode -> sizeOfNode);
 	currentFreeNode = currentFreeNode -> nextNode;
     }
+    Debug::printf("Total unallocated space: %d\n", totSpace);
     return totSpace;
 }
 
