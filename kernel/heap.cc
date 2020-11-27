@@ -375,8 +375,11 @@ void free(void* p) {
 
     Header* left_node = (node -> get_left_footer() < heap_start) ? nullptr : node->get_left_footer()->get_header();
     Header* right_node = (node -> get_right_header() >= heap_end) ? nullptr : node->get_right_header(); // heap_end is a multiple of 4, we can't have a right node start from there
-    if (!left_node->is_allocated() || !right_node->is_allocated()) {
-        if (!left_node->is_allocated() && !right_node->is_allocated()) { // left and right nodes are free
+    bool left_node_is_free = (left_node == nullptr) ? (false) : (!left_node->is_allocated()); // nullptr like guardnodes => allocated = not free
+    bool right_node_is_free = (right_node == nullptr) ? (false) : (!right_node->is_allocated());
+    
+    if (left_node_is_free || right_node_is_free) {
+        if (left_node_is_free && right_node_is_free) { // left and right nodes are free
 	    int32_t new_block_size = get_negative(abs(node->size_and_state) + abs(left_node->size_and_state) + 8 + abs(right_node->size_and_state) + 8);
 	    remove_from_tree(left_node);
 	    remove_from_tree(right_node);
@@ -385,21 +388,22 @@ void free(void* p) {
 	    add_to_tree(left_node);
 	    return;
 	}
-	Header* leftmost = (!left_node->is_allocated()) ? left_node : node;
-	Header* rightmost = (!right_node->is_allocated()) ? right_node : node;
+	// o.w. we will merge two blocks instead of 3
+	Header* leftmost = (left_node_is_free) ? left_node : node;
+	Header* rightmost = (right_node_is_free) ? right_node : node;
 	ASSERT((leftmost == node || rightmost == node) && !(leftmost == node && rightmost == node)); //exactly one of them is node
 	Header* not_node = (leftmost == node) ? (rightmost) : (leftmost); // the one that isn't node
-        int32_t new_block_size = get_negative(abs(leftmost->size_and_state) + abs(rightmost->size_and_state) + 8);
+        int32_t new_block_size = get_negative(abs(leftmost->size_and_state) + abs(rightmost->size_and_state) + 8); // negative since it's free
         remove_from_tree(not_node);
         leftmost->size_and_state = new_block_size;
         rightmost->get_footer()->size_and_state = new_block_size;
-        add_to_tree(leftmost);
+        add_to_tree(leftmost); // leftmost is the combined new free block
         return;	
     }
-    // o.w. right is allocated and left is allocated
-    add_to_tree(node);
-    node->size_and_state *= -1; // negative number is free anyways
+    // o.w. right is allocated and left is allocated, so just free this block
+    node->size_and_state *= -1; // negative number is free
     node->get_footer()->size_and_state *= -1;
+    add_to_tree(node);
     //sanity_checker();
     //print_heap();
 }
