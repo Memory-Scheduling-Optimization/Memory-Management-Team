@@ -116,6 +116,13 @@ void print_heap() {
 }
 
 
+void print_tree(Header* n) {
+    if (n == nullptr) return;
+    Debug::printf("Height: %d, Data: %d, Left: %x, Right: %x\n", n->height, n->get_block_size(), n->left_child, n->right_child);
+    print_tree(n->left_child);
+    print_tree(n->right_child);
+}
+
 void sanity_checker() {
     Header* current_node = (Header*) heap_start;
 
@@ -145,6 +152,7 @@ void sanity_checker() {
 	current_node = current_node->get_right_header(); // next node in the heap
     }
     //TODO function to print out tree from availlist
+    print_tree(avail_list);
 }
 
 Header* rotate_right(Header* n) {
@@ -337,8 +345,8 @@ void* malloc(size_t bytes) { //using best fit policy
 
 void free(void* p) {
     LockGuardP g{heap_lock}; 
-    //Debug::printf("In free, p = %x \n", p);
-    //sanity_checker();
+    Debug::printf("In free, p = %x \n", p);
+    sanity_checker();
     //print_heap();
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
