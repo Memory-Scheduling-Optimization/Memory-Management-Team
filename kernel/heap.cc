@@ -296,10 +296,32 @@ void remove_from_tree(Header* node) {
     avail_list = remove_help(avail_list, node);
 }
 
+void do_small_unit_tests() {
+    print_heap();
+    print_tree(avail_list);
+    malloc(0);
+    print_heap();
+    print_tree(avail_list);
+    void* p = malloc(4);
+    print_heap();
+    print_tree(avail_list);
+    void* p2 = malloc(5);
+    print_heap();
+    print_tree(avail_list);
+    free(p); 
+    print_heap();
+    print_tree(avail_list);
+    malloc(1); // should go pick:  *** (5fffec):  -12 *** 
+    free(p2);
+    print_heap();
+    print_tree(avail_list);
+    Debug::panic("End. In do_small_unit_tests()\n");
+}
+
 void heapInit(void* base, size_t bytes) {
     heap_start = round_up_mult_four(base);
     heap_size = round_down_mult_four(bytes);
-    Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
+    //Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
     heap_end = ptr_add((void*) heap_start, heap_size);
 
     if (heap_size >= MIN_NODE_SIZE) { // if there is room for anything in the heap
@@ -308,16 +330,17 @@ void heapInit(void* base, size_t bytes) {
         middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
         add_to_tree(middle_node);
     }
-    print_heap();
-    sanity_checker();
+    //print_heap();
+    //sanity_checker();
+    //do_small_unit_tests();
     heap_lock = new BlockingLock();
 }
 
 void* malloc(size_t bytes) { //using best fit policy
-    Debug::printf("In malloc, bytes = %d \n", bytes);
+    //Debug::printf("In malloc, bytes = %d \n", bytes);
     LockGuardP g{heap_lock};
-    sanity_checker();
-    print_heap();
+    //sanity_checker();
+    //print_heap();
     bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
     if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
         bytes = MIN_BLOCK_SIZE; // for the minimum block size, so round up 4 & 8 to 12.
@@ -333,13 +356,13 @@ void* malloc(size_t bytes) { //using best fit policy
     }
     //Header* current_node = avail_list;
     Header* best_fit_node = get_best_fit((int32_t) bytes);
-    Debug::printf("bytes: %d, got best fit: %p and it has footer: %p\n", bytes, best_fit_node, best_fit_node->get_footer());
+    //Debug::printf("bytes: %d, got best fit: %p and it has footer: %p\n", bytes, best_fit_node, best_fit_node->get_footer());
     if (best_fit_node == nullptr) return nullptr;
     
     if (abs(best_fit_node->size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
         int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - 8;
 	ASSERT(leftover_bytes >= 8); // leftover_bytes >= 8, still, by algebra
-	Debug::printf("leftover_bytes: %d\n", leftover_bytes);
+	//Debug::printf("leftover_bytes: %d\n", leftover_bytes);
         Header* new_header = (Header*)ptr_add(best_fit_node->get_footer(), get_negative(bytes + 4)); // this indicates we malloc from RHS
         new_header->size_and_state = bytes; // bytes > 0
         new_header->get_footer()->size_and_state = bytes;
@@ -348,24 +371,24 @@ void* malloc(size_t bytes) { //using best fit policy
         best_fit_node->size_and_state = get_negative(leftover_bytes); 
         best_fit_node->get_footer()->size_and_state = get_negative(leftover_bytes);
 	add_to_tree(best_fit_node);
-	sanity_checker();
-        print_heap();
+	//sanity_checker();
+        //print_heap();
         return new_header->get_block(); // since new_header is pointing to the allocated portion
     }
     else { // case where exact fit or 4/8/12/16 extra bytes more than exact fit
 	best_fit_node -> size_and_state *= -1; //indicate that it's now full
 	best_fit_node -> get_footer() -> size_and_state *= -1;
 	remove_from_tree(best_fit_node); // since it's no longer available
-	sanity_checker();
-        print_heap();
+	//sanity_checker();
+        //print_heap();
         return best_fit_node->get_block();
     }
 }
 
 void free(void* p) {
     LockGuardP g{heap_lock}; 
-    Debug::printf("In free, p = %x \n", p);
-    sanity_checker();
+    //Debug::printf("In free, p = %x \n", p);
+    //sanity_checker();
     //print_heap();
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
@@ -391,6 +414,7 @@ void free(void* p) {
 	// o.w. we will merge two blocks instead of 3
 	Header* leftmost = (left_node_is_free) ? left_node : node;
 	Header* rightmost = (right_node_is_free) ? right_node : node;
+	ASSERT(!(leftmost == left_node && rightmost == right_node)); // assert that we didn't miss the above (3 nodes) case
 	ASSERT((leftmost == node || rightmost == node) && !(leftmost == node && rightmost == node)); //exactly one of them is node
 	Header* not_node = (leftmost == node) ? (rightmost) : (leftmost); // the one that isn't node
         int32_t new_block_size = get_negative(abs(leftmost->size_and_state) + abs(rightmost->size_and_state) + 8); // negative since it's free
