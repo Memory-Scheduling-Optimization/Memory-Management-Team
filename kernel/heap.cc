@@ -209,6 +209,7 @@ Header* best_fit_help(Header* cur, int32_t target) {
         Header* a_try = best_fit_help(cur->left_child, target);
         return (cur->get_block_size() < GET_DATA(a_try)) ? (cur) : (a_try);
     }
+    // o.w. cur->get_block_size() == target, so we found a true best fit (note we can arbitraily break ties of multiple perfect fits by picking the first one found)
     return cur; // first found; perfect match
 }
 
@@ -218,8 +219,19 @@ Header* insert_help(Header* cur, Header* node) {
     }
     if (node->get_block_size() < cur->get_block_size()) {
         cur->left_child = insert_help(cur->left_child, node); // recursive call
-    } else {
+    } else if (node->get_block_size() > cur->get_block_size()) {
         cur->right_child = insert_help(cur->right_child, node); // recursive call
+    }
+    // o.w. node->get_block_size() == cur->get_block_size(), so use the tiebreaker of addresses ; this is for O(logn) complexity maintainance 
+    else {
+        if (cur == node) { // already in the tree...
+        }
+	else if (node > cur) {
+	    cur->right_child = insert_help(cur->right_child, node); // recursive call
+	}
+	else { // node < cur
+	    cur->left_child = insert_help(cur->left_child, node); // recursive call 
+	}
     }
     return adjust(cur);
 }
@@ -236,10 +248,13 @@ Header* remove_help(Header* cur, Header* node) {
         else if (node->get_block_size() > cur->get_block_size()) cur->right_child = remove_help(cur->right_child, node);
         // o.w. it's a match
 	else if (node != cur) {
-		cur->right_child = remove_help(cur->right_child, node); // case where multiple free nodes of the same value 
-		cur->left_child = remove_help(cur->left_child, node); // due to self balancing mechanics, it may unfortunately be in the left subtree also.
+		if (node < cur) {
+		    cur->left_child = remove_help(cur->left_child, node);
+		} else { // node > cur
+		    cur->right_child = remove_help(cur->right_child, node);
+		}
 	}
-        else {
+        else { // found it 
             if (cur->left_child == nullptr || cur->right_child == nullptr) {
                 if (cur->left_child == nullptr && cur->right_child == nullptr) { // leaf case
                     cur = nullptr;
