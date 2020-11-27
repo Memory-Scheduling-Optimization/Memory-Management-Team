@@ -1,5 +1,5 @@
-#ifndef _HEAP2_H_
-#define _HEAP2_H_
+#ifndef _HEAP_H_
+#define _HEAP_H_
 
 #include "stdint.h"
 
