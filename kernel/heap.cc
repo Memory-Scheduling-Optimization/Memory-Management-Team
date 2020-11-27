@@ -235,6 +235,10 @@ Header* remove_help(Header* cur, Header* node) {
         if (node->get_block_size() < cur->get_block_size()) cur->left_child = remove_help(cur->left_child, node);
         else if (node->get_block_size() > cur->get_block_size()) cur->right_child = remove_help(cur->right_child, node);
         // o.w. it's a match
+	else if (node != cur) {
+		cur->right_child = remove_help(cur->right_child, node); // case where multiple free nodes of the same value 
+		cur->left_child = remove_help(cur->left_child, node); // due to self balancing mechanics, it may unfortunately be in the left subtree also.
+	}
         else {
             if (cur->left_child == nullptr || cur->right_child == nullptr) {
                 if (cur->left_child == nullptr && cur->right_child == nullptr) { // leaf case
