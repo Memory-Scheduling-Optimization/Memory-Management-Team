@@ -108,9 +108,12 @@ struct Footer {
 
 void print_heap() {
     Header* h = (Header*) heap_start;
+    int i = 0;
     while (h < heap_end) {
 	Debug::printf("*** (%p):  %d ", h, h->size_and_state);
         h = h -> get_right_header();
+	i++;
+	if (i % 10 == 9) Debug::printf("\n");
     }
     Debug::printf("*** \n");
 }
@@ -118,41 +121,82 @@ void print_heap() {
 
 void print_tree(Header* n) {
     if (n == nullptr) return;
-    Debug::printf("Height: %d, Data: %d, Left: %x, Right: %x\n", n->height, n->get_block_size(), n->left_child, n->right_child);
+    Debug::printf("Header: %x, Height: %d, Data: %d, Left: %x, Right: %x\n", n, n->height, n->get_block_size(), n->left_child, n->right_child);
     print_tree(n->left_child);
     print_tree(n->right_child);
 }
 
+int size_of_tree(Header* n) {
+    if (n == nullptr) return 0;
+    return 1 + size_of_tree(n->left_child) + size_of_tree(n->right_child);
+}
+
+int spaceUnallocated() { // from heap's data
+    int totSpace = 0;
+    Header* current_node = (Header*) heap_start;
+
+    while (current_node < heap_end) {
+	if (!current_node->is_allocated()) totSpace += current_node->get_block_size(); // if free current node, add amount of free space to totSpace
+        current_node = current_node->get_right_header(); // next node in the heap
+    }
+    return totSpace;
+}
+
+int spaceUnallocated_from_tree(Header* n) { // from tree's data
+    if (n == nullptr) return 0;
+    return n->get_block_size() + spaceUnallocated_from_tree(n->left_child) + spaceUnallocated_from_tree(n->right_child);
+}
+
+// TODO sanity check for spaceUnallocated() == spaceUnallocated_from_tree(avail_list)
 void sanity_checker() {
     Header* current_node = (Header*) heap_start;
+    int x = 0;
 
     while (current_node < heap_end) {
 
 	// error conditions
         if(current_node->size_and_state != current_node->get_footer()->size_and_state) {
 	    print_heap();
+	    print_tree(avail_list);
 	    Debug::panic("Node at address %p has mismatched header(%d) and footer(%d)", current_node, current_node->size_and_state, current_node->get_footer()->size_and_state);
 	}
         else if (((int32_t)current_node) % 4 != 0) {
 	    print_heap();
+	    print_tree(avail_list);
 	    Debug::panic("Node has misaligned address at %p", current_node);
 	}
 	else if (current_node < heap_start || current_node >= heap_end) {
 	    print_heap();
+	    print_tree(avail_list);
 	    Debug::panic("Node is outside heap bounds (%p)", current_node);
 	}
 	else if (current_node->get_right_header() <= current_node) {
 	    print_heap();
+	    print_tree(avail_list);
 	    Debug::panic("Cycle found (%p)", current_node);
         }
         else if (current_node->size_and_state == 0 || current_node->size_and_state == 4 || current_node->size_and_state == -4 || current_node->size_and_state == 8 || current_node->size_and_state == -8) {
 	    print_heap();
+	    print_tree(avail_list);
             Debug::panic("Node with size_and_state = %d (this is not allowed) was found at (%p)!", current_node -> size_and_state, current_node);
 	}
+	if (!current_node->is_allocated()) x++;
 	current_node = current_node->get_right_header(); // next node in the heap
     }
-    //TODO function to print out tree from availlist
-    print_tree(avail_list);
+    int y = size_of_tree(avail_list);
+    if (y != x) {
+        print_heap();
+        print_tree(avail_list);
+        Debug::panic("Num free nodes = %d != size of tree = %d.", x, y);
+    }
+    int a = spaceUnallocated_from_tree(avail_list);
+    int b = spaceUnallocated();
+    if (a != b) {
+        print_heap();
+        print_tree(avail_list);
+        Debug::panic("space unallocated in heap = %d != space unallocated in heap according to tree = %d.", b, a);
+    }
+    //print_tree(avail_list);
 }
 
 Header* rotate_right(Header* n) {
@@ -390,6 +434,7 @@ void free(void* p) {
     //Debug::printf("In free, p = %x \n", p);
     //sanity_checker();
     //print_heap();
+    //print_tree(avail_list);
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
     if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing
@@ -409,6 +454,7 @@ void free(void* p) {
             left_node->size_and_state = new_block_size;
 	    right_node->get_footer()->size_and_state = new_block_size;
 	    add_to_tree(left_node);
+	    //sanity_checker();
 	    return;
 	}
 	// o.w. we will merge two blocks instead of 3
@@ -422,6 +468,7 @@ void free(void* p) {
         leftmost->size_and_state = new_block_size;
         rightmost->get_footer()->size_and_state = new_block_size;
         add_to_tree(leftmost); // leftmost is the combined new free block
+	//sanity_checker();
         return;	
     }
     // o.w. right is allocated and left is allocated, so just free this block
