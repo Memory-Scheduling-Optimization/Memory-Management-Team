@@ -5,10 +5,13 @@
 #include "atomic.h"
 
 /***********************************/
-/* ASSUMPTIONS			   */
-/* 1) Worst fit allocation         */
-/* 2) Explicit list of free blocks */
-/* 3) Coalescing done during free  */
+/* ASSUMPTIONS                     */
+/* 1) Buddy block allocation       */
+/* 2) Circular doubly linked list  */
+/*    and each bucket corresponds  */
+/*    to a certain allocation size */
+/*    and stores a free list for   */
+/*    size                         */
 /***********************************/
 
 /*************************/
