@@ -8,7 +8,8 @@
 
 static constexpr uint32_t HEAP_HEAP_START = 1 * 1024 * 1024;
 static constexpr uint32_t HEAP_HEAP_SIZE = 5 * 1024 * 1024;
-static constexpr uint32_t ARENA_SIZE = 16 * 1024;
+static constexpr uint32_t ARENA_SIZE = 64 * 1024;
+static constexpr uint32_t ARENA_MASK = 0xFFFF;
 
 namespace gheith {
 
@@ -58,6 +59,7 @@ void addToFreeList(void* base) {
     } 
     // Not only free arena, put at end
     else {
+        // Debug::printf("add to free list\n");
         ASSERT(free_end != nullptr);
         Header* free_end_head = (Header*)free_end;
         free_end_head->next_arena = temp_base;
@@ -72,10 +74,10 @@ void addToFreeList(void* base) {
 int sizeRemaining(void* base) {
     Header* temp_base = (Header*)base;
     // Debug::printf("%x\n", ARENA_SIZE - ((int)(temp_base->this_arena_offset) & 0x3FFF));
-    if (((int)(temp_base->this_arena_offset) & 0x3FFF) == 0)
+    if (((int)(temp_base->this_arena_offset) & ARENA_MASK) == 0)
         return 0;
 
-    return ARENA_SIZE - ((int)(temp_base->this_arena_offset) & 0x3FFF);
+    return ARENA_SIZE - ((int)(temp_base->this_arena_offset) & ARENA_MASK);
 }
 
 /*
@@ -86,7 +88,7 @@ int* updateArena(int size) {
     Header* free_start_temp = (Header*)free_start;
 
     /* Debug printing */
-    // Debug::printf("Aligned malloc size: %x\n", size);
+    // Debug::printf("\nAligned malloc size: %x\n", size);
     // Debug::printf("Free list before num_alloc: %d, offset: %x\n", free_start_temp->num_allocated, 
     //                 free_start_temp->this_arena_offset);
 
@@ -148,7 +150,7 @@ int* findFit(int size) {
 void updateFree(void* p) {
     // Check if p is already free
     if ((*(((int*)p) - 1) & 1) == 0) {
-        Debug::printf("WE HAVE A DOUBLE FREE %x", p);
+        Debug::printf("WE HAVE A DOUBLE FREE %x\n", p);
         return;
     }
     // Is allocated, update to be free
@@ -158,18 +160,21 @@ void updateFree(void* p) {
         *p_temp = *p_temp & ~0x1;
 
         // Update arena block num allocated
-        Header* arena_temp = ((Header*)((int)p & ~0x3FFF));
+        Header* arena_temp = ((Header*)((int)p & ~ARENA_MASK));
         arena_temp->num_allocated--;
 
-        // Debug::printf("%x %d\n", ((int)p & ~0x3FFF), arena_temp->num_allocated);
+        // Debug::printf("%x %d\n", ((int)p & ~ARENA_MASK), arena_temp->num_allocated);
 
         ASSERT(arena_temp->num_allocated >= 0);
 
         // If arena completely empty, we add back to free list
         if (arena_temp->num_allocated == 0) {
+            // Debug::printf("add to free\n");
             arena_temp->this_arena_offset = (int*)arena_temp + 3;
-            arena_temp->next_arena = nullptr;
-            addToFreeList((void*)arena_temp);
+            if (free_start != (int*)arena_temp) {
+                arena_temp->next_arena = nullptr;
+                addToFreeList((void*)arena_temp);
+            }
         }
     }
 }
@@ -177,6 +182,8 @@ void updateFree(void* p) {
 int freeListSpace() {
     int total_space = 0;
     int* curr_free_block = free_start;
+
+    // Debug::printf("%x\n", free_start);
     // Loop through free list
     while (curr_free_block != nullptr) {
         total_space += sizeRemaining(curr_free_block);
@@ -217,7 +224,7 @@ void* malloc(size_t bytes) {
     int alloc_size = ((bytes + 0x3) & ~0x3) + 4;
     // Assume that malloc size never greater than Arena size
     if (alloc_size > ((int)ARENA_SIZE - 12)) {
-        Debug::panic("malloc greater than arena size");
+        Debug::panic("malloc greater than arena size %d\n", bytes);
         return 0;
     }
 
@@ -237,7 +244,7 @@ void free(void* p) {
     updateFree(p);
 }
 
-int spaceRemaining() {
+int spaceUnallocated() {
     using namespace gheith;
     // Debug::printf("base method: %d\n",freeListSpace());
     return freeListSpace();
