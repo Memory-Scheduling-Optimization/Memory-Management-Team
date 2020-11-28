@@ -126,7 +126,7 @@ void doEfficiencyTest() {
         arr[i] = malloc(medium_bytes);
     }
 
-    for (uint32_t i = 0; i < len; ++ i) {
+    for (uint32_t i = len/12; i < len; ++ i) {
         free(arr[i]);
     }
 
