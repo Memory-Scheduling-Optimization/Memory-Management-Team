@@ -147,7 +147,6 @@ int spaceUnallocated_from_tree(Header* n) { // from tree's data
     return n->get_block_size() + spaceUnallocated_from_tree(n->left_child) + spaceUnallocated_from_tree(n->right_child);
 }
 
-// TODO sanity check for spaceUnallocated() == spaceUnallocated_from_tree(avail_list)
 void sanity_checker() {
     Header* current_node = (Header*) heap_start;
     int x = 0;
@@ -391,9 +390,6 @@ void* malloc(size_t bytes) { //using best fit policy
     }
     if (bytes == 0) {// malloc(0) special case
         return ptr_add(heap_end, 4); // returns out of bounds pointer.
-    }
-    if (avail_list == nullptr) { // case where we know that there are no free nodes
-	return nullptr;
     }
     if (bytes > (heap_size - NODE_OVERHEAD)) { // because heap_size is actually an overestimation already (since header + footer)
         return nullptr;
