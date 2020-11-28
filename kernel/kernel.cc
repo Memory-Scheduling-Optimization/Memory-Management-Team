@@ -1,6 +1,5 @@
 #include "stdint.h"
 #include "debug.h"
-#include "random.h"
 #include "shared.h"
 #include "threads.h"
 #include "ext2.h"
