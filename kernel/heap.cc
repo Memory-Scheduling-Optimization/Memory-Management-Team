@@ -14,38 +14,6 @@
 /*    size                         */
 /***********************************/
 
-/*************************/
-/* Some Helper Functions */
-/*************************/
-
-//purely for alignment purposes
-//recall 1 word is 4 bytes, so conversionFactor = 4
-//we need to return the minimum number of words needed to satisfy the number of bytes
-inline int convertByteToWord(int bytes, int conversionFactor) {
-	if(bytes % conversionFactor == 0) {
-		//divisible by 4 bytes per word, we're good to go
-		return bytes / conversionFactor;
-	}
-	else {
-		//we need to round up
-		return (bytes / conversionFactor) + 1;
-	}
-}
-
-//return abs|x|
-template<typename T>
-inline T abs(T v) {
-	return (v < 0) ? -v : v;
-}
-
-//add value to ptr
-//return ptr casted as T*
-template<typename T>
-inline T* ptr_add(void* ptr, int value) {
-	return (T*) (((char*) ptr) + value);
-}
-
-
 /***********************************/
 /* Global Variables and Structures */
 /***********************************/
@@ -53,95 +21,134 @@ inline T* ptr_add(void* ptr, int value) {
 namespace rdanait {
 
         static BlockingLock *theLock = nullptr;
-
-	struct Footer {
-		int sizeOfNode;
-	};
-
-	struct Header {
-		//positive means allocated node, negative means free node
-		//size is in words
-		int sizeOfNode;
-
-		//ptr to header of the previous free node
-		Header* prevNode;
-		//ptr to header of the next free node
-		Header* nextNode;
-
-		//return the ptr to header of the next node
-		//we just have to add to this node
-		inline Header* getRightHeader() {
-			return ptr_add<Header>(this, abs<int>(sizeOfNode) * 4);
-		}
-
-		//return the ptr to the footer of this node
-		inline Footer* getFooter() {
-			return ptr_add<Footer>(getRightHeader(), -4);
-		}
-
-		//return the ptr to header of the previous node
-		//we just have to subtract from this node
-		inline Header* getLeftHeader() {
-			int sizeOfLeftNode = abs(ptr_add<Footer>(this, -4) -> sizeOfNode);
-			return ptr_add<Header>(this, -sizeOfLeftNode * 4);
-		}
-
-		inline bool isThisNodeFree() {
-			return sizeOfNode < 0;
-		}
-
-	};
-
-	//ptr to header of first free node in the list
-	Header* freeListPtr = nullptr;
+	//ptr to first free node in the list
+	int* freeListPtr = nullptr;
 	//ptr to start of the heap
 	void* heapPtr = nullptr;
 	//heap size
 	int heapSize = 0;
-
-	/*************************/
-	/* More Helper Functions */
-	/*************************/
-
-	//Node to be removed is no longer free
-	void removeFreeNode(Header* nodeToRemove) {
-		//Looks like this node is the only node in the free list
-		if(nodeToRemove -> prevNode == nullptr && nodeToRemove -> nextNode == nullptr) {
-			//Just make the ptr to header of the first free node nullptr
-			freeListPtr = nullptr;
-		}
-		//Looks like this node is the last node in the free list
-		else if(nodeToRemove -> prevNode != nullptr && nodeToRemove -> nextNode == nullptr) {
-			//Remove the previous node's next reference
-			nodeToRemove -> prevNode -> nextNode = nullptr;
-		}
-		//Looks like this node is the first node in the free list, but not the only node
-		else if(nodeToRemove -> prevNode == nullptr && nodeToRemove -> nextNode != nullptr) {
-			//Make the ptr to header of the first node in the free list be the next node now
-			freeListPtr = nodeToRemove -> nextNode;
-			//Remove the next node's prev reference
-			nodeToRemove -> nextNode -> prevNode = nullptr;
-		}
-		//Looks like this node is in between two free nodes in the free list
-		else {
-			//set the next reference of the prev node to this node's next node
-			nodeToRemove -> prevNode -> nextNode = nodeToRemove -> nextNode;
-			//set the prev reference of the next node to this node's prev node
-			nodeToRemove -> nextNode -> prevNode = nodeToRemove -> prevNode;
-		}
+	
+        void offset_updater(int *heap_ptr, int old_offset) {
+            int* temp = freeListPtr;
+    	    while ((temp + temp[1]/4) != heap_ptr || temp[1] == 0) {
+        	if(temp[1] == 0) return;
+        	temp += temp[1]/4;
+    	    }
+    	    if(old_offset == 0) temp[1] = 0;
+    	    else temp[1] += old_offset;
+    	    return;
 	}
 
-	//Current and next node (which exists) must be free
-	void combineWithRightNode(Header* nodePtr) {
-		//We first need to get the header of the right node
-		Header* nextNodeHeader = nodePtr -> getRightHeader();
-		//Now, we need to update the size of the new node
-		int newSize = nextNodeHeader -> sizeOfNode + nodePtr -> sizeOfNode;
-		nodePtr -> sizeOfNode = newSize;
-		//Don't forget to update the footer too!
-		nodePtr -> getFooter() -> sizeOfNode = newSize;
-		//Now we can remove the next node from the free node list
-		removeFreeNode(nextNodeHeader);
+	void free_offset_updater(int *header_ptr) {
+            int* temp = freeListPtr;
+    	    //traverse the list until the free block immediately above the newly freed block
+	    while(temp + temp[1]/4 < header_ptr) {
+        	temp += temp[1]/4;
+    	    }
+	    //update the offset
+    	    int offset = header_ptr - temp;
+    	    temp[1] = offset;
+	}
+
+        int* gruntWork(int* heap_ptr, int size) {
+	    int* heap = heap_ptr;
+	    //heap points to a block of the right size
+	    if(heap[0] == size) {
+		//check if this block is the first free block
+		if(heap == freeListPtr) {
+		    //update free list to point to the next free block
+		    freeListPtr += heap[1]/4;
+		}
+		//save old offset
+		int old_offset = heap[1];
+		//mark as allocated
+		heap[1] = 0;
+		offset_updater(heap, old_offset);
+		return heap + 2;
+ 	    }
+	    //heap points to a block with smaller size
+	    if(heap[0] < size) {
+		if(heap[1] == 0) {
+		    //if this is the last free block
+		    return nullptr;
+		}
+		int ptr_offset = heap[1]/4;
+		return gruntWork(heap + ptr_offset, size);
+	    }
+	    else {
+		int buddy = heap[0]/2;
+		//save old offset
+		int old_offset = heap[1];
+		//set size of current block
+		heap[0] = buddy;
+		heap[1] = buddy;
+		int buddy_offset = buddy/4;
+		//set size of buddy block
+		heap[buddy_offset] = buddy;
+		if(old_offset == 0) heap[buddy_offset + 1] = 0;
+		else heap[buddy_offset + 1] = old_offset - buddy;
+		return gruntWork(heap, size);
+	    }
+	}
+
+	int* findBuddy(int* block) {
+	    int* heap = (int*) heapPtr;
+	    int count = 1;
+	    int cumulative = 0;
+	    int lastSize = 0;
+
+	    //passes through the heap until the passed in memory block is met
+	    while(heap != block) {
+		if(heap[0] < block[0]) {
+		    cumulative += heap[0];
+		    if(cumulative < block[0]) {
+			heap += heap[0]/4;
+			lastSize = heap[0];
+			//count is not incremented because cumulative is not yet of the same size as the passed in block
+			continue;
+		    }
+		}
+		if(heap[0] > block[0]) {
+		    //count is not incremented because the block is too big 
+		    heap += heap[0]/4;
+                    lastSize = heap[0];
+		    continue;
+		}
+		//count increments either when an accumulation of small memory blocks
+		//reach the size of the passed in memory block or when the heap pointer
+		//points to a memory block of equal size
+		lastSize = heap[0];
+		cumulative = 0;
+		count++;
+		heap += heap[0]/4;
+	    }
+    	    int* before = heap - (lastSize/4);
+	    int* next = heap + heap[0]/4;
+	    //if the count is odd we look at the next pointer 
+	    if (count % 2) {
+		//because it is the first buddy (when sequentially looking through the heap)
+		if(next[0] == block[0] && next[1] >= block[0]) {
+		    block[0] *= 2;
+		    block[1] += next[1];
+		    next[0] = 0;
+		    next[1] = 0;
+		    //open buddy is found and findBuddy is called again
+		    return findBuddy(block);
+		}
+		else return block; //no open buddy, nothing is coalesced
+	    }	    
+	    else {
+		//the count is even so we look at the before pointer 
+		//because it is the second of the two buddies (sequentially)
+		if(before[0] == block[0] && before[1] > 0) {
+		    before[0] *= 2;
+		    block[0] = 0;
+		    block[1] = 0;
+		    //open buddy at the before pointer and findBuddy is called again
+		    return findBuddy(before);
+		}
+		else return block; //no open buddy, nothing is coalesced
+            }
 	}
 };
 
@@ -155,144 +162,80 @@ void heapInit(void* start, size_t bytes) {
     using namespace rdanait;
     heapPtr = start;
     heapSize = bytes;
-    freeListPtr = (Header*) start;
-    //Get the size, indicate it is free with negative
-    freeListPtr -> sizeOfNode = -convertByteToWord(heapSize, 4);
-    //Init the prev and next nodes to nullptr
-    freeListPtr -> prevNode = nullptr;
-    freeListPtr -> nextNode = nullptr;
-    //Make sure to put the size in the footer as well
-    freeListPtr -> getFooter() -> sizeOfNode = freeListPtr -> sizeOfNode;
+    freeListPtr = (int*) heapPtr;
+    freeListPtr[0] = heapSize;
+    freeListPtr[1] = 0; //0 for last free block
     theLock = new BlockingLock();
 }
 
 void* malloc(size_t bytes) {
-
     using namespace rdanait;
-    //What if bytes < 0 or bytes > heapSize? Just return nullptr
-	if ((int) bytes < 0 || (int) bytes > heapSize - 8) return nullptr;
+    LockGuardP g{theLock};
+    int* ptr;
+    bytes += 8;
+    int size = sizeof(int)*2;
+    while(size < (int) bytes) {
+	size *= 2;
+    }
+    ptr = gruntWork(freeListPtr, size);
+    Debug::printf("ptr is: %d\n", ptr);
+    return (void*) ptr;
 
-	//If malloc(0), we want to return one past the highest possible address malloc can return 
-	if (bytes == 0) return (void*) (((char*) heapPtr) + heapSize);
-
-	LockGuardP g{theLock};
-	//Get the size in words
-	int words = convertByteToWord(bytes, 4);
-	if (words < 2) words = 2;
-
-        Header* worst = nullptr;
-
-        if(freeListPtr != nullptr) {
-	    Header* newFreeNode = freeListPtr;
-	    //need to search through the free list for a free node using worst fit algorithm 
-	    while(newFreeNode != nullptr) {
-		//We found a free node that's size is big enough
-		if(abs(newFreeNode -> sizeOfNode) - 2 >= words) {
-	            //First possible match is of course the current worst match
-		    if(worst == nullptr) {
-			worst = newFreeNode;
-	            }
-	            else { 
-      	                //we found a match earlier
-		        //only change if current free node is actually worse than worst
-		        if(abs(worst -> sizeOfNode) < abs(newFreeNode -> sizeOfNode)) {
-		            worst = newFreeNode;
-	                }
-	            }
-	        }
-		//This node doesn't have a large enough size, let's try the next one
-		newFreeNode = newFreeNode -> nextNode;
-	    }
-	}
-	if(worst == nullptr) return nullptr; //can just return now if we didn't find a worst node 
-	else {
-            //We have to split the node up
-	    if(abs(worst -> sizeOfNode) >= words + 8) {
-		//we need to update the size of the free node now
-                worst -> sizeOfNode = -(abs(worst -> sizeOfNode) - words - 2);
-                //update the footer's size as well
-                worst -> getFooter() -> sizeOfNode = worst -> sizeOfNode;
-                //Right node header size needs to update
-                worst -> getRightHeader() -> sizeOfNode = words + 2;
-                //Right node footer size also needs to be updated
-                worst -> getRightHeader() -> getFooter() -> sizeOfNode = words + 2;
-                //return a ptr to new node
-                return ptr_add<void>(worst -> getRightHeader(), 4);
-	    }
-            else {
-                //negate the size in the header and footer, since it is now allocated
-                worst -> sizeOfNode *= -1;
-                worst -> getFooter() -> sizeOfNode *= -1;
-                //remove from the free nodes list
-                removeFreeNode(worst);
-                //return a ptr to the node
-                return ptr_add<void>(worst, 4);	
-	    }
-	}
-
-	return nullptr;
 }
 
 void free(void* p) {
 
     using namespace rdanait;
-
-    //If nullptr, don't need to do anything
-    if (p == nullptr) return;
-        //Or if we're trying to free an invalid address, say, as a result of malloc(0)
-	if (p == ((char*) heapPtr) + heapSize) return;
-    if (ptr_add<Header>(p, -4) -> isThisNodeFree()) return;
-        LockGuardP g{theLock};
-
-	Header* headerOfP = ptr_add<Header>(p, -4);
-	//We first need to make sure this node is indicated to be free in header and footer by negating
-	headerOfP -> sizeOfNode *= -1;
-    headerOfP -> getFooter() -> sizeOfNode *= -1;
-    //Now we can add this node to our free nodes list
-    //This will not be the only node in our free nodes list
-    if (freeListPtr != nullptr) {
-    	//Make the prev reference null
-    	headerOfP -> prevNode = nullptr;
-    	//Header's next reference needs to be the header ptr
-	    headerOfP -> nextNode = freeListPtr;
-	    //Beginning of the free nodes list
-	    freeListPtr = headerOfP;
-	    //Next node's prev reference needs to be this node
-	    headerOfP -> nextNode -> prevNode = headerOfP;
-
+    LockGuardP g{theLock};
+    int* headerPtr = (int*) p;
+    headerPtr -= 2;
+    //find the last free block
+    int* lastFree = freeListPtr;
+    while(lastFree[1] != 0) lastFree += lastFree[1]/4;
+    //insert freed block into the free list, i.e. correct offsets
+    //headerPtr needs to be the new last free block
+    if(lastFree < headerPtr) {
+	int offset = lastFree[0];
+	int* temp = lastFree;
+        //while the next block is allocated and is not the newly freed block
+	while((temp + (temp[0]/4) + 1) == 0 && temp + temp[0]/4 != headerPtr) {
+	    temp += temp[0]/4; //move temp the size of the allocated block
+            offset += temp[0]; //add the size of the next block to offset
+	}
+	lastFree[1] = offset;
     }
-    //Else this is the only in our free nodes list
+    //else find what the offset needs to be for the freed block
     else {
-    	//Make this the first node in the free list
-    	freeListPtr = headerOfP;
-    	//Make the prev reference null
-		headerOfP -> prevNode = nullptr;
-		//Make the next reference null
-		headerOfP -> nextNode = nullptr;
+	int offset = headerPtr[0];
+	int* temp = headerPtr;
+	//while the next block is allocated and is not the last free block
+	while((temp + (temp[0]/4) + 1) == 0 && temp + temp[0]/4 != lastFree) {
+	    temp += temp[0]/4; //move temp the size of the allocated block
+            offset += temp[0]; //add the size of the next block to offset
+	}
+	headerPtr[1] = offset;
+	//check if the freed block should be the new freelist head
+	if(headerPtr < freeListPtr) {
+	    freeListPtr = headerPtr;
+	}
+	//else update the offset of the free block above the newly freed block
+	else free_offset_updater(headerPtr);
     }
-
-    //Now we want to coalesce some nodes if they are free
-    //We first coalesce with the right node if it exists and is free
-    if ((char*) (headerOfP -> getRightHeader()) < (((char*) heapPtr) + heapSize) && headerOfP -> getRightHeader() -> isThisNodeFree()) {
-		combineWithRightNode(headerOfP);
-    }
-    //We coalesce with the left node if it exists and is free
-    if (((char*) headerOfP) > ((char*) heapPtr) && headerOfP -> getLeftHeader() -> isThisNodeFree()) {
-		combineWithRightNode(headerOfP -> getLeftHeader());
-    }
-
+    findBuddy(headerPtr);
 }
 
 int spaceUnallocated() {
     using namespace rdanait;
-    int totSpace = 0;
-    Header* currentFreeNode = freeListPtr;
-    while(currentFreeNode != nullptr && currentFreeNode -> isThisNodeFree()) {
-	totSpace += abs(currentFreeNode -> sizeOfNode);
-	currentFreeNode = currentFreeNode -> nextNode;
+    int* free = freeListPtr;
+    int totSize = 0;
+    while(free[1] != 0) {
+	int allocSize = free[1] - free[0];
+	if(allocSize == 0) {
+	    totSize += free[0];
+	}	
+	free += free[1]/4;
     }
-    Debug::printf("Total unallocated space: %d\n", totSpace);
-    return totSpace;
+    return totSize;
 }
 
 /*****************/
