@@ -8,8 +8,8 @@
 
 static constexpr uint32_t HEAP_HEAP_START = 1 * 1024 * 1024;
 static constexpr uint32_t HEAP_HEAP_SIZE = 5 * 1024 * 1024;
-static constexpr uint32_t ARENA_SIZE = 64 * 1024;
-static constexpr uint32_t ARENA_MASK = 0xFFFF;
+static constexpr uint32_t ARENA_SIZE = 512 * 1024;
+static constexpr uint32_t ARENA_MASK = 0x7FFFF;
 
 namespace gheith {
 
