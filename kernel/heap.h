@@ -8,5 +8,7 @@ extern "C" void* malloc(size_t size);
 extern "C" void free(void* p);
 
 extern int spaceUnallocated();
+extern void traverseNodes();
+extern void traverseFreeList();
 
 #endif

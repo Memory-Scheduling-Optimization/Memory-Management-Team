@@ -10,8 +10,8 @@
 #include "sys.h"
 #include "pit.h"
 
-static void* blockPointersTest1[100];
-static void* blockPointersTest2[1000];
+//static void* blockPointersTest1[100];
+//static void* blockPointersTest2[1000];
 constexpr uint32_t BIG_MALLOCS = 235;
 struct BigChunkOfMemory {
     uint8_t a;
@@ -41,7 +41,7 @@ void doSpeedTest(void);
 void memUtil(void);
 
 void kernelMain(void) {
-
+    /*
     Debug::printf("\n");
     Debug::printf("Start of simple stress/correctness tests\n");
     Debug::printf("Test 1\n");
@@ -94,14 +94,14 @@ void kernelMain(void) {
     Debug::printf("End of simple stress/correctness tests\n");
     
     Debug::printf("\n");
-
+    */
     Debug::printf("Start of efficiency test\n");
     doEfficiencyTest();
     Debug::printf("End of efficiency test\n");
 
     Debug::printf("\n");
 
-    Debug::printf("Start of big malloc stress trest\n");
+    Debug::printf("Start of big malloc stress test\n");
     doLargeStressTest();
     Debug::printf("End of big malloc stress test\n");
 
@@ -112,10 +112,10 @@ void kernelMain(void) {
     Debug::printf("End of speed test\n");
 
     Debug::printf("\n");
-
+    /*
     Debug::printf("Memory utilization calculation\n");
     memUtil();
-
+    */
 }
 
 void doEfficiencyTest() {
@@ -161,6 +161,8 @@ void doLargeStressTest() {
     for (uint32_t i = 0; i < BIG_MALLOCS; ++ i) {
         arr[i] = new BigChunkOfMemory;
     }
+    
+    traverseNodes(); 
 
     for (uint32_t i = 0; i <= BIG_MALLOCS / 2; ++ i) {
         free(arr[i]);
@@ -172,6 +174,8 @@ void doLargeStressTest() {
 
     free(arr);
    
+    traverseFreeList();
+
     Debug::printf("*** Passed big malloc stress test\n");
 
 }

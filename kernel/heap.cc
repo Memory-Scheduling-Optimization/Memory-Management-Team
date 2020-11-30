@@ -313,6 +313,28 @@ int spaceUnallocated() {
     return totSpace;
 }
 
+void traverseNodes() {
+    using namespace rdanait;
+    Header* ptr = (Header*) heapPtr;
+    int nodeIdx = 0;
+    while ((((char*) ptr) - ((char*) heapPtr)) < heapSize) {
+	Debug::printf("%d-th node, size = %d\t\n", nodeIdx, ptr -> sizeOfNode);
+	ptr = ptr_add<Header>(ptr, abs(ptr->sizeOfNode) * 4);
+	nodeIdx += 1;	
+    }
+    Debug::printf("\n\n");
+}
+
+void traverseFreeList() {
+    using namespace rdanait;
+    Debug::printf("Free List contains (not in any particular order): \n");
+    Header* curr = freeListPtr;
+    while(curr != nullptr && curr -> isThisNodeFree()) {
+    	Debug::printf("block %d \n", abs(curr -> sizeOfNode));
+	curr = curr -> nextNode;
+    }
+}
+
 /*****************/
 /* C++ operators */
 /*****************/
