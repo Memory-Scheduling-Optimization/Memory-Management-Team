@@ -126,12 +126,13 @@ void print_tree(Header* n) {
     print_tree(n->right_child);
 }
 
+
 int size_of_tree(Header* n) {
     if (n == nullptr) return 0;
     return 1 + size_of_tree(n->left_child) + size_of_tree(n->right_child);
 }
 
-int spaceUnallocated() { // from heap's data
+int spaceUnallocated_() { // from heap's data
     int totSpace = 0;
     Header* current_node = (Header*) heap_start;
 
@@ -140,6 +141,12 @@ int spaceUnallocated() { // from heap's data
         current_node = current_node->get_right_header(); // next node in the heap
     }
     return totSpace;
+}
+
+int spaceUnallocated_from_tree(Header* n); 
+
+int spaceUnallocated() {
+    return spaceUnallocated_from_tree(avail_list);
 }
 
 int spaceUnallocated_from_tree(Header* n) { // from tree's data
@@ -189,13 +196,12 @@ void sanity_checker() {
         Debug::panic("Num free nodes = %d != size of tree = %d.", x, y);
     }
     int a = spaceUnallocated_from_tree(avail_list);
-    int b = spaceUnallocated();
+    int b = spaceUnallocated_();
     if (a != b) {
         print_heap();
         print_tree(avail_list);
         Debug::panic("space unallocated in heap = %d != space unallocated in heap according to tree = %d.", b, a);
     }
-    //print_tree(avail_list);
 }
 
 Header* rotate_right(Header* n) {
