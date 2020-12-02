@@ -56,7 +56,7 @@ void doTimingTest() {
     for (uint32_t i = 0; i < 100000; i++) {
         arr[i] = (int*)malloc((r->next() % 32) + 1);
     }
-    // memUtil();
+    memUtil();
 
     for (uint32_t i = 0; i < 100000; i++) {
         free(arr[i]);

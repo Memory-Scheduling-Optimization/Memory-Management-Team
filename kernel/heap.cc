@@ -94,10 +94,13 @@ int* updateArena(int size) {
 
     // Increment num allocated
     free_start_temp->num_allocated++;
-    // Mark block with size and as allocated
-    *(free_start_temp->this_arena_offset) = size | 1;
 
-    int* free_fit = free_start_temp->this_arena_offset + 1;
+    /* No more need to mark headers */
+    // Mark block with size and as allocated
+    // *(free_start_temp->this_arena_offset) = size | 1;
+
+    int* free_fit = free_start_temp->this_arena_offset;
+    // int* free_fit = free_start_temp->this_arena_offset + 1;
 
     /* Divide size by 4 since int* */
     free_start_temp->this_arena_offset += (((uint32_t)size)>>2);
@@ -148,16 +151,19 @@ int* findFit(int size) {
 }
 
 void updateFree(void* p) {
+    /* No longer able to check for double frees */
     // Check if p is already free
-    if ((*(((int*)p) - 1) & 1) == 0) {
-        Debug::printf("WE HAVE A DOUBLE FREE %x\n", p);
-        return;
-    }
+    // if ((*(((int*)p) - 1) & 1) == 0) {
+    //     Debug::printf("WE HAVE A DOUBLE FREE %x\n", p);
+    //     return;
+    // }
+
     // Is allocated, update to be free
-    else {
+    // else {
+        /* No longer need to update header */
         // Update malloc block header to be free
-        int* p_temp = ((int*) p) - 1;
-        *p_temp = *p_temp & ~0x1;
+        // int* p_temp = ((int*) p) - 1;
+        // *p_temp = *p_temp & ~0x1;
 
         // Update arena block num allocated
         Header* arena_temp = ((Header*)((int)p & ~ARENA_MASK));
@@ -176,7 +182,7 @@ void updateFree(void* p) {
                 addToFreeList((void*)arena_temp);
             }
         }
-    }
+    // }
 }
 
 int freeListSpace() {
@@ -220,8 +226,11 @@ void* malloc(size_t bytes) {
 
     LockGuardP g{theLock};
 
+    /* No longer need to add 1, Headers are removed */
+    int alloc_size = ((bytes + 0x3) & ~0x3);
     // Align size and add 1 for size storage
-    int alloc_size = ((bytes + 0x3) & ~0x3) + 4;
+    // int alloc_size = ((bytes + 0x3) & ~0x3) + 4;
+
     // Assume that malloc size never greater than Arena size
     if (alloc_size > ((int)ARENA_SIZE - 12)) {
         Debug::panic("malloc greater than arena size %d\n", bytes);
