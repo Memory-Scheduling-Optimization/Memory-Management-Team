@@ -108,34 +108,41 @@ struct Footer {
 
 
 // usage: cast a Header* into a Slab for convenience
+// ex: Slab* slb = (Header*) node;
 struct Slab { // TODO
     int32_t size_and_state;
-    uint32_t bitmap;
+    uint32_t bitmap; // using extra 8 bytes of data (actual data part of a malloc())
     Header* next;
-
+    
+    // returns true if this slab node is full, false otherwise
     inline bool is_full() {
          return bitmap == 0xFFFFFFFF;
     }
-
+    
+    // there are 32 blocks, and we need to subtract 8 for the size_and_state plus the bitmap
     inline uint32_t get_block_size() {
         return (abs(size_and_state) - 8) / 32;
     }
-
+    
+   // returns a void* ptr to the start of the 32 contigious blocks 
     inline void* get_blocks_start() {
         return ptr_add((void*)this, 12); //4 for size_and_state, 4 for bitmap, 4 for next
     }
-
+    
+    // returns a void* ptr to the address right after the 32nd block ends
     inline void* get_blocks_end() {
         return ptr_add(get_blocks_start(), 32 * get_block_size()); // 32 blocks, each of size get_block_size()
     }
 
-    inline void* get_a_block(int i) { // zero-based indexing
+    // returns a void* ptr to the block in this slab at index i (zero-indexed)
+    inline void* get_a_block(int i) { 
 	uint32_t offs = get_block_size() * i;
         return ptr_add(get_blocks_start(), offs); 
     }
 
     inline bool block_is_free(int i) { // zero-based indexing. true => it's free, false => it's not free.
-        return (bitmap & (1 << i)) == 0;
+	ASSERT(i >= 0 && i < 32);
+        return (bitmap & (1 << ((uint32_t)i))) == 0;
     }
 
     // returns index of earliest free block found
@@ -144,28 +151,29 @@ struct Slab { // TODO
         uint32_t cur = bitmap;
 
 	for (int32_t i = 0; i < 32; i++) {
-            if (cur & 0x1 == 0) { // if free block found
+            if ((cur & 0x1) == 0) { // if free block found
 	        return i;
 	    }
 	    cur = cur >> 1;
 	}
-	return -1;
+	ASSERT(is_full());
+	return -1; // no free blocks found
     }
 
     // sets bit at bit index i 
     // precondition: bit index i was previously zero
     inline void set_bit(uint32_t i) {
-        ASSERT(i >= 0 && i < 32 && (bitmap & (1 << i) == 0));
+        ASSERT(i >= 0 && i < 32 && ((bitmap & (1 << i)) == 0));
         bitmap |= 1 << i; // <-- 2^i
-        ASSERT(bitmap & (1 << i) != 0);
+        ASSERT((bitmap & (1 << i)) != 0); // make sure that it worked
     }
 
     // zeroes bit at bit index i
     // precondition: bit index i was previously one
     inline void free_bit(uint32_t i) {
-        ASSERT(i >= 0 && i < 32 && (bitmap & (1 << i) != 0));
+        ASSERT(i >= 0 && i < 32 && ((bitmap & (1 << i)) != 0));
         bitmap &= ~(1 << i); // <-- 2^i complement
-        ASSERT(bitmap & (1 << i) == 0);
+        ASSERT((bitmap & (1 << i)) == 0); // make sure that it worked
     }
     
     // finds the index of block that point p is pointing to (assuming p has to be start of the block)
@@ -460,15 +468,13 @@ void* do_slab (size_t bytes) {
 	Slab* current = (Slab*) cur;
         if (cur == nullptr || current->get_block_size() != bytes) continue;
 	// so we found the slab list that works
-	Header* prev = nullptr;
 
         while (current != nullptr) {
 	    if (!current->is_full()) {
 	        int32_t j = current->get_free_block();
 		current->set_bit(j);
-		return (void*) get_a_block(j);
+		return (void*) current->get_a_block(j);
 	    }
-	    prev = current;
 	    current = (Slab*) current->next;
 	}
 	// so all of the slabs were full. We need to make a new slab and we can put it at the front of the slab list
@@ -477,10 +483,10 @@ void* do_slab (size_t bytes) {
 		return nullptr; // failed to make a slab node because heap didn't have the room for it. 
 	}
         new_slab->bitmap = 0; // init new slab
-	new_slab->next = cur;
+	new_slab->next = cur; // cur is slabs[i]
 	slabs[i] = (Header*) new_slab; // update array with the new slab node at the front of it
-	current->set_bit(i);
-        return (void*) new_slab->get_a_block(i); 	
+	current->set_bit(0); // since we just made a new slab, we can just return the left-most block (i.e. index = 0 block)
+        return (void*) new_slab->get_a_block(0); 	
     }
     // it all failed...
     return nullptr; 
@@ -506,17 +512,19 @@ Header* is_in_slab (void* p) {
     return nullptr;
 }
 
+// preconditions: slab != nullptr, p is one of the 32 blocks inside slab
 void undo_slab (Header* slab, void* p) {
+    ASSERT(slab != nullptr);
     Slab* slb = (Slab*) slab;
-    int32_t index = find_index_of_block(p);
+    int32_t index = slb->find_index_of_block(p);
     ASSERT(index > 0); 
     slb->free_bit(index); // adjust bitmap so that the block is effectively freed
-    if (slb->bitmask == 0) { // if this is true, then we need to remove slb from its slablist
+    if (slb->bitmap == 0) { // if this is true, then we need to remove slb from its slablist
 
         for (int i = 0; i < 4; i++) {
             Header* cur = slabs[i];
             Slab* s = (Slab*) cur;
-	    if (s->get_block_size() != slb->get_block_size()) {
+	    if (s == nullptr || s->get_block_size() != slb->get_block_size()) { // if it's an empty list or the wrong list then continue
 	        continue; // not the right slab list so go to the next slab list
 	    }
 	    if (cur == slab) { // first node case
