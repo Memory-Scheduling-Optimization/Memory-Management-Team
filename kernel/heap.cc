@@ -532,10 +532,8 @@ void* do_slab (size_t bytes) {
     for (int i = 0; i < 4; i++) { // max 4 slab lists for now
         Header* cur = slabs[i];
 	Slab* current = (Slab*) cur;
-	Debug::printf("in do_slab(), i: %d, cur: %x\n", i, cur);
         if (cur == nullptr || current->get_block_size() != bytes) continue;
 	// so we found the slab list that works
-        Debug::printf("in do_slab(), i: %d\n", i);
         while (current != nullptr) {
 	    if (!current->is_full()) {
 	        int32_t j = current->get_free_block();
@@ -585,7 +583,7 @@ void undo_slab (Header* slab, void* p) {
     ASSERT(index >= 0); 
     slb->free_bit(index); // adjust bitmap so that the block is effectively freed
     if (slb->bitmap == 0) { // if this is true, then we need to remove slb from its slablist
-	Debug::printf("YYYYYYYY\n");
+
         for (int i = 0; i < 4; i++) {
             Header* cur = slabs[i];
             Slab* s = (Slab*) cur;
@@ -594,7 +592,6 @@ void undo_slab (Header* slab, void* p) {
 	    }
 	    if (cur == slab) { // first node case
 		// still need to do a free:
-		Debug::printf("QQQQ slab: %x\n", slab);
 		free(ptr_add(slab, 4));
 	        slabs[i] = (((Slab*)slabs[i])->next);
 	        return;
@@ -629,7 +626,7 @@ void heapInit(void* base, size_t bytes) {
     //print_heap();
     //sanity_checker();
     //do_small_unit_tests();
-    do_slab_unit_tests();
+    //do_slab_unit_tests();
     heap_lock = new BlockingLock();
 }
 
@@ -690,14 +687,12 @@ void free(void* p) {
     //print_tree(avail_list);
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
-    if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing
-	Debug::printf("EEEEEEE\n");
+    if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing TODO consider !node->is_allocated() check w/ slabs
         return;
     }
     Header* p_slab = is_in_slab(p);
 
     if (p_slab != nullptr) { // if p is in some slab node
-	Debug::printf("XXXXXX\n");
         undo_slab(p_slab, p);
 	return;	
     }
