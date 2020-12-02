@@ -201,6 +201,16 @@ void print_heap() {
     Debug::printf("*** \n");
 }
 
+void print_slab(Slab* s) {
+    if (s == nullptr) return;
+    Debug::printf("Slab: %x, is_full: %d, get_block_size: %d, get_blocks_start: %p, get_blocks_end: %p, Bitmap: %x, Next: %p,", s, s->is_full(), s->get_block_size(), s->get_blocks_start(), 
+		    s->get_blocks_end(), s->bitmap, s->next);
+/*
+    for (int i = 0; i < 32; i++) {
+        Debug::printf(" i: %d, %p, data: %x\n", i, s->get_a_block(i), *((uint32_t*) s->get_a_block(i)));
+    }*/
+    Debug::printf("\n");
+}
 
 void print_tree(Header* n) {
     if (n == nullptr) return;
@@ -451,6 +461,37 @@ void do_small_unit_tests() {
 }
 
 
+void do_slab_unit_tests() {
+    print_heap();
+    print_slab((Slab*) slabs[0]);
+    void* p = malloc(4);
+    print_heap();
+    print_slab((Slab*) slabs[0]);
+    Debug::printf("p: %x\n", p);
+
+    for (int i = 0; i < 31; i++) {
+        void* p2 = malloc(4);
+        print_heap();
+        print_slab((Slab*) slabs[0]);
+        Debug::printf("in loop, i: %d, p2: %x\n", i, p2);
+    }
+    Debug::printf("\n\n");
+    print_slab((Slab*) slabs[0]);
+    print_slab((Slab*)(((Slab*) slabs[0]) -> next));
+    Debug::panic("End. In do_slab_unit_tests()\n");
+}
+
+Slab* make_slab (uint32_t block_size, uint32_t init_bitmap, Header* next_node) {
+    int32_t total_slab_size = 32 * block_size + 8;
+    void* temp = malloc(total_slab_size); 
+    if (temp == nullptr) { // because the + 4 bytes
+        return nullptr; // failed to make a slab node because heap didn't have the room for it. 
+    }
+    Slab* new_slab = (Slab*) ptr_add(temp, -4); // issue: malloc() returns pointer 4 away from header
+    new_slab->bitmap = init_bitmap; // init new slab
+    new_slab->next = next_node;
+    return new_slab;
+}
 
 // do_slab() will allocate b bytes inside a slab node
 // this is done either in a new slab node or an existing one 
@@ -461,14 +502,15 @@ void do_small_unit_tests() {
 // so total-slab-size = 32*bytes + 16B
 void* do_slab (size_t bytes) {
     ASSERT(bytes % 4 == 0 && bytes >= 4); // assert that bytes is in bounds
-    int32_t total_slab_size = 32 * bytes + 8; // 8 because 4 for bitmap and 4 for next
+//    int32_t total_slab_size = 32 * bytes + 8; // 8 because 4 for bitmap and 4 for next
     
     for (int i = 0; i < 4; i++) { // max 4 slab lists for now
         Header* cur = slabs[i];
 	Slab* current = (Slab*) cur;
+	Debug::printf("in do_slab(), i: %d, cur: %x\n", i, cur);
         if (cur == nullptr || current->get_block_size() != bytes) continue;
 	// so we found the slab list that works
-
+        Debug::printf("in do_slab(), i: %d\n", i);
         while (current != nullptr) {
 	    if (!current->is_full()) {
 	        int32_t j = current->get_free_block();
@@ -478,14 +520,12 @@ void* do_slab (size_t bytes) {
 	    current = (Slab*) current->next;
 	}
 	// so all of the slabs were full. We need to make a new slab and we can put it at the front of the slab list
-        Slab* new_slab = (Slab*) malloc(total_slab_size);
+        Slab* new_slab = make_slab(bytes, 0x1, cur); // cur is slabs[i]
 	if (new_slab == nullptr) {
 		return nullptr; // failed to make a slab node because heap didn't have the room for it. 
 	}
-        new_slab->bitmap = 0; // init new slab
 	new_slab->next = cur; // cur is slabs[i]
 	slabs[i] = (Header*) new_slab; // update array with the new slab node at the front of it
-	current->set_bit(0); // since we just made a new slab, we can just return the left-most block (i.e. index = 0 block)
         return (void*) new_slab->get_a_block(0); 	
     }
     // it all failed...
@@ -537,7 +577,7 @@ void undo_slab (Header* slab, void* p) {
 	    // so cur's next is slab
 	    s = (Slab*) cur;
 	    s->next = ((Slab*)(s->next))->next;
-	    free(s->next); // since the node is removed from the free list, we can just remove it from the heap by using free()
+	    free(ptr_add(s->next, 4)); // since the node is removed from the free list, we can just remove it from the heap by using free() <-- expects 4+ ptr
         }
     }
 }
@@ -548,22 +588,27 @@ void heapInit(void* base, size_t bytes) {
     //Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
     heap_end = ptr_add((void*) heap_start, heap_size);
 
-    if (heap_size >= MIN_NODE_SIZE) { // if there is room for anything in the heap
+   // if (heap_size >= MIN_NODE_SIZE) { // if there is room for anything in the heap
         Header* middle_node = (Header*)heap_start;
         middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
         middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
         add_to_tree(middle_node);
-    }
+
+	slabs[0] = (Header*) make_slab(4, 0x1, nullptr);
+	slabs[1] = (Header*) make_slab(8, 0x1, nullptr);
+        
+   // }
     //print_heap();
     //sanity_checker();
     //do_small_unit_tests();
+    do_slab_unit_tests();
     heap_lock = new BlockingLock();
 }
 
 void* malloc(size_t bytes) { //using best fit policy
     //Debug::printf("In malloc, bytes = %d \n", bytes);
     LockGuardP g{heap_lock};
-    //sanity_checker();
+    sanity_checker();
     //print_heap();
     bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
 //    if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
