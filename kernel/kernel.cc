@@ -1,6 +1,6 @@
 #include "stdint.h"
 #include "debug.h"
-
+#include "random.h"
 #include "shared.h"
 #include "threads.h"
 #include "ext2.h"
@@ -9,121 +9,63 @@
 #include "process.h"
 #include "barrier.h"
 #include "sys.h"
+#include "pit.h"
+#include "random.h"
 
-const char* initName = "/sbin/init";
-
-void printFile(Shared<Node> file) {
-    if (file == nullptr) {
-	Debug::printf("file does not exist\n");
-	return;
-    }
-    auto buffer = new char[file->size_in_bytes()];
-    file->read_all(0, file->size_in_bytes(), buffer);
-    for (uint32_t i = 0; i < file->size_in_bytes(); i++)
-	Debug::printf("%c", buffer[i]);
-    delete[] buffer;
-}
-
-void segregatedBasicTest(void);
-void segregatedRightCoalesceTest(void);
-void segregatedLeftCoalesceTest(void);
-void segregatedBothCoalesceTest(void);
+void doTimingTest(void);
+void doSpeedTest(void);
+void doTimingSpeedTest(void);
+void memUtil(void);
 
 void kernelMain(void) {
-    Debug::printf("*** Start of kernelMain()\n");
+
+    Debug::printf("Start of Timing test\n");
+    int number_of_millions = 100; // 10 --> 10 million (1 of 10 mils)
+
+    for (int i = 0; i < 1 * number_of_millions; i++) { // i = 100 for 10 million
+        doTimingTest();
+    }
+    Debug::printf("End of Timing test\n");
+}
+
+void doTimingTest() {
+    int** arr = new int*[100000];
+    auto r = new Random(3487);
+
+    for (uint32_t i = 0; i < 100000; i++) {
+        arr[i] = (int*)malloc((r->next() % 32) + 1);
+    }
+    // memUtil();
+
+    for (uint32_t i = 0; i < 100000; i++) {
+        free(arr[i]);
+    }
     
-    segregatedBasicTest();
-
-    segregatedRightCoalesceTest();
-
-    segregatedLeftCoalesceTest();
-
-    segregatedBothCoalesceTest();
+    free(arr);
+    delete(r);
+    //memUtil();
+    // Debug::printf("\n");
 }
 
-void checkAlignment(void* p) {
-    if (((int)p & 3) != 0) {
-        Debug::printf("*** Alignment failure at %x\n", p);
-    }
+template <typename Work>
+uint32_t howLong(Work work) {
+    uint32_t start = Pit::jiffies;
+    work();
+    return (Pit::jiffies - start);
 }
 
-void segregatedBasicTest(void) {
-    int* temp = (int*)malloc(4);
-    checkAlignment((void*)temp);
-    *temp = 420;
+void doTimingSpeedTest() {
+    //Speed test calls large stress test
+    auto x = howLong([] {
+    doTimingTest();
+    });
 
-    int* temp2 = (int*)malloc(26);
-    checkAlignment((void*)temp2);
-    *temp2 = 0xFFFFFFFF;
+    Debug::printf("*** Time taken for big malloc timing test: %d\n", x);
 
-    if (*temp != 420) {
-        Debug::printf("*** Basic Segregated Test failed\n");
-    } else {
-        Debug::printf("*** Basic Segregated Test passed\n");
-    }
-
-    free(temp2);
-    free(temp);
 }
 
-void segregatedRightCoalesceTest(void) {
-    // Check right coalescing
-    int* temp = (int*)malloc(16);
-    int* temp2 = (int*)malloc(16);
-    int* temp3 = (int*)malloc(16);
-
-    free(temp2);
-    free(temp);
-
-    int* temp4 = (int*)malloc(24);
-
-    if (temp == temp4) {
-        Debug::printf("*** Coalesce right Segregated Test passed\n");
-    } else {
-        Debug::printf("*** Coalesce right Segregated Test failed %x\t%x\n", temp, temp4);
-    }
-    free(temp3);
-    free(temp4);
-}
-
-void segregatedLeftCoalesceTest(void) {
-    // Check left coalescing
-    int* temp = (int*)malloc(16);
-    int* temp2 = (int*)malloc(16);
-    int* temp3 = (int*)malloc(16);
-
-    free(temp);
-    free(temp2);
-
-    int* temp4 = (int*)malloc(24);
-
-    if (temp == temp4) {
-        Debug::printf("*** Coalesce left Segregated Test passed\n");
-    } else {
-        Debug::printf("*** Coalesce left Segregated Test failed %x\t%x\n", temp, temp4);
-    }
-    free(temp3);
-    free(temp4);
-}
-
-void segregatedBothCoalesceTest(void) {
-    // Check coalescing on both sides
-    int* temp = (int*)malloc(16);
-    int* temp2 = (int*)malloc(16);
-    int* temp3 = (int*)malloc(32);
-    int* temp4 = (int*)malloc(16);
-
-    free(temp);
-    free(temp3);
-    free(temp2);
-    
-    int* temp5 = (int*)malloc(56);
-
-    if (temp == temp5) {
-        Debug::printf("*** Coalesce both Segregated Test passed\n");
-    } else {
-        Debug::printf("*** Coalesce both Segregated Test failed %x\t%x\n", temp, temp5);
-    }
-    free(temp4);
-    free(temp5);
+void memUtil() {
+    double heapSize = 5 * 1024 * 1024;
+    double totalAmountUnallocated = spaceUnallocated();
+    Debug::printf("*** Memory utilized = %f%%\n", ((heapSize - totalAmountUnallocated)/heapSize)*100);   
 }

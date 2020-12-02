@@ -121,7 +121,7 @@ void heapInit(void* base, size_t bytes) {
     Header* epilogue = (Header*)start1;
     epilogue->size_and_state = PACK(WSIZE, 1);
 
-    mm_check();
+    // mm_check();
 
     theLock = new BlockingLock();
 }
@@ -327,7 +327,7 @@ void free(void* p) {
         coalesce(headptr);
     }
 
-    mm_check();
+    // mm_check();
 }
 
 int spaceUnallocated() {
