@@ -464,11 +464,35 @@ void do_small_unit_tests() {
 void do_slab_unit_tests() {
     print_heap();
     print_slab((Slab*) slabs[0]);
+    malloc(4);
     void* p = malloc(4);
+    malloc(4);
     print_heap();
     print_slab((Slab*) slabs[0]);
     Debug::printf("p: %x\n", p);
+    free(p);
+    print_heap();
+    print_slab((Slab*) slabs[0]);
+    malloc(4);
+    p = malloc(4);
+    Debug::printf("p: %x\n", p);
+    print_heap();
+    print_slab((Slab*) slabs[0]);
+    free(p);
+    for (int i = 0; i < 28; i++) {
+        malloc(4);
+    }
+    Debug::printf("for loop done.\n");
+    print_heap();
+    print_slab((Slab*) slabs[0]);
+    p = malloc(4);
+    print_heap();
+    print_slab((Slab*) slabs[0]);
+    free(p);
+    print_heap();
+    print_slab((Slab*) slabs[0]);
 
+    /*
     for (int i = 0; i < 31; i++) {
         void* p2 = malloc(4);
         print_heap();
@@ -478,6 +502,7 @@ void do_slab_unit_tests() {
     Debug::printf("\n\n");
     print_slab((Slab*) slabs[0]);
     print_slab((Slab*)(((Slab*) slabs[0]) -> next));
+    */
     Debug::panic("End. In do_slab_unit_tests()\n");
 }
 
@@ -557,10 +582,10 @@ void undo_slab (Header* slab, void* p) {
     ASSERT(slab != nullptr);
     Slab* slb = (Slab*) slab;
     int32_t index = slb->find_index_of_block(p);
-    ASSERT(index > 0); 
+    ASSERT(index >= 0); 
     slb->free_bit(index); // adjust bitmap so that the block is effectively freed
     if (slb->bitmap == 0) { // if this is true, then we need to remove slb from its slablist
-
+	Debug::printf("YYYYYYYY\n");
         for (int i = 0; i < 4; i++) {
             Header* cur = slabs[i];
             Slab* s = (Slab*) cur;
@@ -568,6 +593,9 @@ void undo_slab (Header* slab, void* p) {
 	        continue; // not the right slab list so go to the next slab list
 	    }
 	    if (cur == slab) { // first node case
+		// still need to do a free:
+		Debug::printf("QQQQ slab: %x\n", slab);
+		free(ptr_add(slab, 4));
 	        slabs[i] = (((Slab*)slabs[i])->next);
 	        return;
 	    }
@@ -663,11 +691,13 @@ void free(void* p) {
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
     if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing
+	Debug::printf("EEEEEEE\n");
         return;
     }
     Header* p_slab = is_in_slab(p);
 
     if (p_slab != nullptr) { // if p is in some slab node
+	Debug::printf("XXXXXX\n");
         undo_slab(p_slab, p);
 	return;	
     }
