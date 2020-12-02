@@ -121,7 +121,7 @@ void heapInit(void* base, size_t bytes) {
     Header* epilogue = (Header*)start1;
     epilogue->size_and_state = PACK(WSIZE, 1);
 
-    // mm_check();
+    mm_check();
 
     theLock = new BlockingLock();
 }
@@ -130,17 +130,20 @@ void heapInit(void* base, size_t bytes) {
 void add_helper(void* hp, size_t index) {
     using namespace gheith;
     Header* headptr = (Header*)hp;
+
+    headptr->prev_avail = (Header*)index;
+
     // if no blocks in free list
     if (freeList[index] == nullptr) {
         headptr->next_avail = nullptr;
-        headptr->prev_avail = nullptr;
+        // headptr->prev_avail = nullptr;
         freeList[index] = headptr;
     }
     // blocks exist shift blocks to add
     else {
         freeList[index]->prev_avail = headptr;
         headptr->next_avail = freeList[index];
-        headptr->prev_avail = nullptr;
+        // headptr->prev_avail = nullptr;
         freeList[index] = headptr;
     }
 }
@@ -161,13 +164,17 @@ void add_free(void* hp, size_t size) {\
     add_helper(hp, free_index);
 }
 
+// Adapted
 void remove_from_free_list(void* hp) {
-    using namespace ericchen;
+    using namespace gheith;
     Header* headptr = (Header*)hp;
 
-    if(freeList == headptr) {
-        // First free node
-        freeList = headptr->next_avail;
+    if(((uint32_t)(headptr->prev_avail)) < SEGREGATEDLENGTH) {
+        // First free node in section
+        // Debug::printf("OCCURED\n");
+        if (headptr->next_avail != nullptr)
+            headptr->next_avail->prev_avail = headptr->prev_avail;
+        freeList[(uint32_t)headptr->prev_avail] = headptr->next_avail;
     } else if (headptr->next_avail == nullptr) {
         // End node
         headptr->prev_avail->next_avail = nullptr;
@@ -220,22 +227,30 @@ void* coalesce(void *hp) {
     return nullptr;
 }
 
+// Adapted hopefully
 void* find_fit(size_t asize) {
-    using namespace ericchen;
-    int index = 0;
-    while
-    // Header* findhead = freeList;
-    // Header* finalhead = nullptr;
-    // while (findhead != nullptr) {
-    //     if (findhead->get_size() >= asize) 
-    //     // Find free block that fits best fit
-    //     {
-    //         if (finalhead == nullptr || findhead->get_size() < finalhead->get_size())
-    //             finalhead = findhead;
-    //     }
-    //     findhead = findhead->next_avail;
-    // }
-    // return finalhead;
+    using namespace gheith;
+
+    int free_index = 0;
+    while (asize > (size_t)(2 << (free_index + 3))) {
+        // Debug::printf("%x\t%d\n", free_index, 2 << (free_index + 4));
+        free_index++;
+    }
+
+    // Debug::printf("Size: %x\tIndex: %d\t", asize, free_index);
+
+    while (free_index < SEGREGATEDLENGTH && freeList[free_index] == nullptr) {
+        free_index++;
+    }
+
+    // Debug::printf("Actual index: %d\n", free_index);
+
+    if (free_index == SEGREGATEDLENGTH)
+        return nullptr;
+    if (freeList[free_index] != nullptr) {
+        return freeList[free_index];
+    }
+    return nullptr;
 }
 
 // Adapted
@@ -247,6 +262,7 @@ void place(void* hp, size_t asize) {
     /* Free block able to fit another free block after allocation */
     if ((csize - asize) >= MINSIZE)
     {
+        // Debug::printf("SPLITTING\n");
         remove_from_free_list(hp);
         placehead->size_and_state = PACK(asize, 1);
         placehead->get_footer()->size_and_state = PACK(asize, 1);
@@ -267,98 +283,78 @@ void place(void* hp, size_t asize) {
 
 void* malloc(size_t bytes) {
     using namespace gheith;
-    //Debug::printf("malloc(%d)\n",bytes);
-    // if (bytes == 0) return (void*) array;
-    // if (bytes == 0) return endheap;
+    // Debug::printf("malloc(%x)\n",bytes);
 
-    // LockGuardP g{theLock};
+    if (bytes == 0) return endheap;
 
-    // char *hp;
+    LockGuardP g{theLock};
 
-    // size_t asize = MAX(MINSIZE, ALIGN(bytes + DSIZE));
+    char *hp;
 
-    // if ((hp = (char*)find_fit(asize)) != nullptr) {
-    //     place(hp, asize);
-    // }
+    size_t asize = MAX(MINSIZE, ALIGN(bytes + DSIZE));
 
-    // // mm_check();
+    if ((hp = (char*)find_fit(asize)) != nullptr) {
+        place(hp, asize);
+    }
 
-    // if(hp == nullptr)
-    //     return nullptr;
-    // return hp + WSIZE;
-    return nullptr;
+    mm_check();
+
+    // Debug::printf("%x\t%x\n", MINSIZE, bytes+DSIZE);
+    // Debug::printf("Malloc: %x\tSpace remaining: %x\t%x\n", asize, spaceUnallocated(), hp);
+
+    if(hp == nullptr)
+        return nullptr;
+    return hp + WSIZE;
 
 }
 
 void free(void* p) {
     using namespace gheith;
-    if (p == 0) return;
-    // if (p == (void*) array) return;
+    if (p == 0 || p == endheap) return;
 
     LockGuardP g{theLock};
 
-    // int idx = ((((uintptr_t) p) - ((uintptr_t) array)) / 4) - 1;
-    // sanity(idx);
-    // if (!isTaken(idx)) {
-    //     Debug::panic("freeing free block, p:%x idx:%d\n",(uint32_t) p,(int32_t) idx);
-    //     return;
-    // }
+    Header* headptr = (Header*)((char*)p - WSIZE);
+    // ptr invalid or already free
+    if (!headptr->is_allocated())
+    {
 
-    // int sz = size(idx);
+    } else {
+        // DOUBLE CHECK CORRECTNESS LATER
+        uint32_t tempsize = headptr->size_and_state;
+        headptr->size_and_state = tempsize & ~0x1;
+        headptr->get_footer()->size_and_state = tempsize & ~0x1;
+        coalesce(headptr);
+    }
 
-    // int leftIndex = left(idx);
-    // int rightIndex = right(idx);
+    mm_check();
+}
 
-    // if (isAvail(leftIndex)) {
-    //     remove(leftIndex);
-    //     idx = leftIndex;
-    //     sz += size(leftIndex);
-    // }
-
-    // if (isAvail(rightIndex)) {
-    //     remove(rightIndex);
-    //     sz += size(rightIndex);
-    // }
-
-    // makeAvail(idx,sz);
+int spaceUnallocated() {
+     using namespace gheith;
+     int total = 0;
+     for (int i = 0; i < SEGREGATEDLENGTH; i++) {
+         if (freeList[i] != nullptr) {
+             Header* ptr = (Header*)(freeList[i]);
+             while (ptr != nullptr) {
+                total += ptr->get_size();
+                ptr = ptr->next_avail;
+             }
+         }
+     }
+     return total;
 }
 
 void mm_check() {
-    // using namespace gheith;
-    // Debug::printf("\nDEBUGGING\n");
-    // // Free List check
-    // if (freeList != nullptr) {
-    // Header* freelisttemp = freeList;
-    // int count = 0;
-    // while(freelisttemp != nullptr)
-    // {
-    //     if(freelisttemp->is_allocated())
-    //         Debug::printf("Free List node allocated\n");
-    //     Debug::printf("Block size of %x at %x\n", freelisttemp->get_size(), freelisttemp);
-    //     count++;
-    //     freelisttemp = freelisttemp->next_avail;
-    // }
-    // Debug::printf("%d Free blocks\n", count);
-    // } else
-    //     Debug::printf("FREE LIST EMPTY\n");
-
-    // // Heap checker
-    // Header* check = (Header*)heapstart;
-    // while (check != (Header*)endheap) {
-    //     if(check->get_size() != check->get_footer()->get_size()) {
-    //         Debug::printf("Size inconsistency at: %x\n", check);
-    //         Debug::printf("Head: %x\tFoot:%x\n", check->get_size(), check->get_footer()->get_size());
-    //     }
-    //     if(check->is_allocated() != check->get_footer()->is_allocated()) {
-    //         Debug::printf("Alloc inconsistency\n");
-    //     }
-    //     if(!check->get_prev()->is_allocated() && !check->is_allocated()) { //Coalesce fail
-    //         Debug::printf("Coalesce failure %x and %x\n", check->get_prev(), check);
-    //     }
-    //     check = check->get_next();
-    // }
-
-    // Debug::printf("\n");
+    using namespace gheith;
+    for (int i = 0; i < SEGREGATEDLENGTH; i++) {
+        if (freeList[i] != nullptr) {
+             Header* ptr = (Header*)(freeList[i]);
+             if (ptr->prev_avail != (Header*)i) {
+                Debug::printf("*** Free list start failure index %d, %x\n", i, freeList[i]);
+             }
+         }
+    }
 }
 
 
