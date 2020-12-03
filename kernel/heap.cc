@@ -26,6 +26,8 @@ static int const MIN_NODE_SIZE = 20;
 static int const MIN_BLOCK_SIZE = 12;
 static int const NODE_OVERHEAD = 8;
 Header* slabs[4] = {nullptr, nullptr, nullptr, nullptr}; // 4 for now
+int num_slab_lists = 0;
+const int max_num_slab_lists = 4;
 
 template <typename T>
 inline T abs(T v) {
@@ -627,6 +629,15 @@ void undo_slab (Header* slab, void* p) {
     }
 }
 
+void start_slabbing(uint32_t amount) {
+    if (num_slab_lists >= max_num_slab_lists) {
+        return;
+    }
+    slabs[num_slab_lists++] = (Header*) make_slab(amount, 0x1, nullptr);
+}
+
+// TODO: impl stop_slabbing ??
+
 void heapInit(void* base, size_t bytes) {
     heap_start = round_up_mult_four(base);
     heap_size = round_down_mult_four(bytes);
@@ -639,9 +650,10 @@ void heapInit(void* base, size_t bytes) {
         middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
         add_to_tree(middle_node);
 
-	slabs[0] = (Header*) make_slab(4, 0x1, nullptr);
-	slabs[1] = (Header*) make_slab(8, 0x1, nullptr);
-        
+        start_slabbing(4);
+        start_slabbing(8);
+        start_slabbing(12);	
+	start_slabbing(16);
    // }
     //print_heap();
     //sanity_checker();
@@ -712,7 +724,7 @@ void* malloc(size_t bytes) { //using best fit policy
     if (bytes == 0) {// malloc(0) special case
         return ptr_add(heap_end, 4); // returns out of bounds pointer.
     }
-    if (bytes < MIN_BLOCK_SIZE) { // making slab nodes for malloc(4) and malloc(8) cases... for now
+    if (bytes < MIN_BLOCK_SIZE || bytes == 12 || bytes == 16) { // making slab nodes for malloc(4) and malloc(8) cases... for now
         return do_slab(bytes);
     }
     if (bytes > (heap_size - NODE_OVERHEAD)) { // because heap_size is actually an overestimation already (since header + footer)
