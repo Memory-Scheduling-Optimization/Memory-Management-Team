@@ -189,6 +189,10 @@ struct Slab { // TODO
     }
 };
 
+
+void* nolock_malloc(size_t bytes);
+void nolock_free(void* p);
+
 void print_heap() {
     Header* h = (Header*) heap_start;
     int i = 0;
@@ -210,6 +214,17 @@ void print_slab(Slab* s) {
         Debug::printf(" i: %d, %p, data: %x\n", i, s->get_a_block(i), *((uint32_t*) s->get_a_block(i)));
     }*/
     Debug::printf("\n");
+}
+
+void print_slab_lists() {
+    for (int i = 0; i < 4; i++) { // max 4 slab lists for now
+        Header* cur = slabs[i];
+	while (cur != nullptr) {
+	    Slab* s = (Slab*) cur;
+	    print_slab(s);
+	    cur = s->next;
+	}
+    }
 }
 
 void print_tree(Header* n) {
@@ -508,7 +523,7 @@ void do_slab_unit_tests() {
 
 Slab* make_slab (uint32_t block_size, uint32_t init_bitmap, Header* next_node) {
     int32_t total_slab_size = 32 * block_size + 8;
-    void* temp = malloc(total_slab_size); 
+    void* temp = nolock_malloc(total_slab_size); // OH FUCK
     if (temp == nullptr) { // because the + 4 bytes
         return nullptr; // failed to make a slab node because heap didn't have the room for it. 
     }
@@ -561,9 +576,10 @@ Header* is_in_slab (void* p) {
     
     for (int i = 0; i < 4; i++) {
 	Header* cur = slabs[i];
-        
+  //      if(((uint32_t)p) == 0x5972f4) Debug::printf("made it here, i: %d, cur: %x\n", i, cur); // temp 
         while (cur != nullptr) {
 	    Slab* slb = (Slab*) cur;
+//	    if(((uint32_t)p) == 0x5972f4) print_slab(slb);
 	    if (p >= slb->get_blocks_start() && p < slb->get_blocks_end()) { // get_blocks_end() is exclusive
 	        // found the slab that it belongs to
 		return cur;
@@ -580,7 +596,7 @@ void undo_slab (Header* slab, void* p) {
     ASSERT(slab != nullptr);
     Slab* slb = (Slab*) slab;
     int32_t index = slb->find_index_of_block(p);
-    ASSERT(index >= 0); 
+    ASSERT(index >= 0 && index < 32); 
     slb->free_bit(index); // adjust bitmap so that the block is effectively freed
     if (slb->bitmap == 0) { // if this is true, then we need to remove slb from its slablist
 
@@ -592,17 +608,21 @@ void undo_slab (Header* slab, void* p) {
 	    }
 	    if (cur == slab) { // first node case
 		// still need to do a free:
-		free(ptr_add(slab, 4));
-	        slabs[i] = (((Slab*)slabs[i])->next);
+//		Debug::printf("AAAAAAAAA\n");
+		slabs[i] = (((Slab*)slabs[i])->next);
+		nolock_free(ptr_add(slab, 4)); // same thing as before with free issue maybe
 	        return;
 	    }
             while (((Slab*)cur)->next != slab) {
                 cur = ((Slab*)cur)->next;
 	    }
 	    // so cur's next is slab
+//	    Debug::printf("BBBBBBB %p, %p, %p\n", slab, cur, ((Slab*)cur)->next);
 	    s = (Slab*) cur;
+	    ASSERT(s->next == slab);
 	    s->next = ((Slab*)(s->next))->next;
-	    free(ptr_add(s->next, 4)); // since the node is removed from the free list, we can just remove it from the heap by using free() <-- expects 4+ ptr
+	    nolock_free(ptr_add(slab, 4)); // since the node is removed from the free list, we can just remove it from the heap by using free() <-- expects 4+ ptr
+	    return; // ^^
         }
     }
 }
@@ -630,20 +650,70 @@ void heapInit(void* base, size_t bytes) {
     heap_lock = new BlockingLock();
 }
 
-void* malloc(size_t bytes) { //using best fit policy
-    //Debug::printf("In malloc, bytes = %d \n", bytes);
-    LockGuardP g{heap_lock};
-    sanity_checker();
-    //print_heap();
+void* nolock_malloc(size_t bytes) { //using best fit policy
     bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
 //    if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
 //        bytes = MIN_BLOCK_SIZE; // for the minimum block size, so round up 4 & 8 to 12.
 //    }
+    if (bytes == 0) {// malloc(0) special case
+        return ptr_add(heap_end, 4); // returns out of bounds pointer.
+    }
     if (bytes < MIN_BLOCK_SIZE) { // making slab nodes for malloc(4) and malloc(8) cases... for now
         return do_slab(bytes);
     }
+    if (bytes > (heap_size - NODE_OVERHEAD)) { // because heap_size is actually an overestimation already (since header + footer)
+        return nullptr;
+    }
+    //Header* current_node = avail_list;
+    Header* best_fit_node = get_best_fit((int32_t) bytes);
+    //Debug::printf("bytes: %d, got best fit: %p and it has footer: %p\n", bytes, best_fit_node, best_fit_node->get_footer());
+    if (best_fit_node == nullptr) return nullptr;
+
+    if (abs(best_fit_node->size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
+        int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - 8;
+        ASSERT(leftover_bytes >= 8); // leftover_bytes >= 8, still, by algebra
+        //Debug::printf("leftover_bytes: %d\n", leftover_bytes);
+        Header* new_header = (Header*)ptr_add(best_fit_node->get_footer(), get_negative(bytes + 4)); // this indicates we malloc from RHS
+        new_header->size_and_state = bytes; // bytes > 0
+        new_header->get_footer()->size_and_state = bytes;
+
+        remove_from_tree(best_fit_node);
+        best_fit_node->size_and_state = get_negative(leftover_bytes);
+        best_fit_node->get_footer()->size_and_state = get_negative(leftover_bytes);
+        add_to_tree(best_fit_node);
+        //sanity_checker();
+        //print_heap();
+        return new_header->get_block(); // since new_header is pointing to the allocated portion
+    }
+    else { // case where exact fit or 4/8/12/16 extra bytes more than exact fit
+        best_fit_node -> size_and_state *= -1; //indicate that it's now full
+        best_fit_node -> get_footer() -> size_and_state *= -1;
+        remove_from_tree(best_fit_node); // since it's no longer available
+        //sanity_checker();
+        //print_heap();
+        return best_fit_node->get_block();
+    }
+}
+
+
+
+void* malloc(size_t bytes) { //using best fit policy
+    //Debug::printf("In malloc, bytes = %d \n", bytes);
+    LockGuardP g{heap_lock};
+    //sanity_checker();
+    //print_heap();
+    if (bytes == 0) {// temp 
+        print_heap();
+    }
+    bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
+//    if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
+//        bytes = MIN_BLOCK_SIZE; // for the minimum block size, so round up 4 & 8 to 12.
+//    }
     if (bytes == 0) {// malloc(0) special case
         return ptr_add(heap_end, 4); // returns out of bounds pointer.
+    }
+    if (bytes < MIN_BLOCK_SIZE) { // making slab nodes for malloc(4) and malloc(8) cases... for now
+        return do_slab(bytes);
     }
     if (bytes > (heap_size - NODE_OVERHEAD)) { // because heap_size is actually an overestimation already (since header + footer)
         return nullptr;
@@ -679,9 +749,60 @@ void* malloc(size_t bytes) { //using best fit policy
     }
 }
 
+void nolock_free(void* p) {
+    Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
+
+    if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing TODO consider !node->is_allocated() check w/ slabs
+        return;
+    }
+    Header* p_slab = is_in_slab(p);
+
+    if (p_slab != nullptr) { // if p is in some slab node
+        undo_slab(p_slab, p);
+        return;
+    }
+
+    Header* left_node = (node -> get_left_footer() < heap_start) ? nullptr : node->get_left_footer()->get_header();
+    Header* right_node = (node -> get_right_header() >= heap_end) ? nullptr : node->get_right_header(); // heap_end is a multiple of 4, we can't have a right node start from there
+    bool left_node_is_free = (left_node == nullptr) ? (false) : (!left_node->is_allocated()); // nullptr like guardnodes => allocated = not free
+    bool right_node_is_free = (right_node == nullptr) ? (false) : (!right_node->is_allocated());
+
+    if (left_node_is_free || right_node_is_free) {
+        if (left_node_is_free && right_node_is_free) { // left and right nodes are free
+            int32_t new_block_size = get_negative(abs(node->size_and_state) + abs(left_node->size_and_state) + 8 + abs(right_node->size_and_state) + 8);
+            remove_from_tree(left_node);
+            remove_from_tree(right_node);
+            left_node->size_and_state = new_block_size;
+            right_node->get_footer()->size_and_state = new_block_size;
+            add_to_tree(left_node);
+            //sanity_checker();
+            return;
+        }
+        // o.w. we will merge two blocks instead of 3
+        Header* leftmost = (left_node_is_free) ? left_node : node;
+        Header* rightmost = (right_node_is_free) ? right_node : node;
+        ASSERT(!(leftmost == left_node && rightmost == right_node)); // assert that we didn't miss the above (3 nodes) case
+        ASSERT((leftmost == node || rightmost == node) && !(leftmost == node && rightmost == node)); //exactly one of them is node
+        Header* not_node = (leftmost == node) ? (rightmost) : (leftmost); // the one that isn't node
+        int32_t new_block_size = get_negative(abs(leftmost->size_and_state) + abs(rightmost->size_and_state) + 8); // negative since it's free
+        remove_from_tree(not_node);
+        leftmost->size_and_state = new_block_size;
+        rightmost->get_footer()->size_and_state = new_block_size;
+        add_to_tree(leftmost); // leftmost is the combined new free block
+        //sanity_checker();
+        return;
+    }
+    // o.w. right is allocated and left is allocated, so just free this block
+    node->size_and_state *= -1; // negative number is free
+    node->get_footer()->size_and_state *= -1;
+    add_to_tree(node);
+    //sanity_checker();
+    //print_heap();
+}
+
 void free(void* p) {
     LockGuardP g{heap_lock}; 
-    //Debug::printf("In free, p = %x \n", p);
+//    Debug::printf("In free, p = %x \n", p);
     //sanity_checker();
     //print_heap();
     //print_tree(avail_list);
@@ -690,7 +811,9 @@ void free(void* p) {
     if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing TODO consider !node->is_allocated() check w/ slabs
         return;
     }
-    Header* p_slab = is_in_slab(p);
+//    if(((uint32_t)p) == 0x5972f4) Debug::printf("made it here 0 \n"); // temp
+    Header* p_slab = is_in_slab(p); // PROBLEM
+//    if(((uint32_t)p) == 0x5972f4) Debug::printf("made it here\n"); // temp
 
     if (p_slab != nullptr) { // if p is in some slab node
         undo_slab(p_slab, p);
