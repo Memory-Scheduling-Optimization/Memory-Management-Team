@@ -99,14 +99,14 @@ extern "C" void kernelInit(void) {
 
         /* initialize physmem */
         PhysMem::init(VMM_FRAMES, kConfig.memSize - VMM_FRAMES);
-
-        /* running global constructors */
+       
+	/* running global constructors */
         //CRT::init();
 
         /* initialize VMM */
         VMM::global_init();
-
-        /* global constructors */
+        
+	/* global constructors */
         CRT::init();
 
         /* initialize system calls */

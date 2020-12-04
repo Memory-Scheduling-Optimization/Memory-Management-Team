@@ -73,11 +73,11 @@ namespace PhysMem {
         Debug::printf("| physical range 0x%x 0x%x\n",start,start+size);
         avail = start;
         limit = start + size;
-
+	
 	/* Initialize refs */
 	refs = new uint32_t[((size-1) >> 23)+1]{0};
-	
-        /* register the page fault handler */
+
+	/* register the page fault handler */
         IDT::trap(14,(uint32_t)pageFaultHandler_,3);
     }
     
