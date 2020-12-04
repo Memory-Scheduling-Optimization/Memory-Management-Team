@@ -8,6 +8,7 @@ extern "C" func_ptr _fini_array_start[0], _fini_array_end[0];
 
 void CRT::init(void)
 {
+   
     for (func_ptr* func = _init_array_start; func != _init_array_end; func++)
     {
         (*func)();

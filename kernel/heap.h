@@ -9,6 +9,4 @@ extern "C" void free(void* p);
 
 extern int spaceUnallocated();
 
-extern int count_blocks(int i);
-
 #endif

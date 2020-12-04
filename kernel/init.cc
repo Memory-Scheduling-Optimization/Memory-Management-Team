@@ -92,30 +92,30 @@ extern "C" void kernelInit(void) {
 
         /* initialize the heap */
         heapInit((void*)HEAP_START,HEAP_SIZE);
-
-        /* switch to dynamically allocated UART */
+        
+	/* switch to dynamically allocated UART */
         Debug::init(new U8250);
         Debug::printf("| switched to new UART\n");
 
         /* initialize physmem */
         PhysMem::init(VMM_FRAMES, kConfig.memSize - VMM_FRAMES);
-
-        /* running global constructors */
+        
+	/* running global constructors */
         //CRT::init();
 
         /* initialize VMM */
         VMM::global_init();
 
-        /* global constructors */
+	/* global constructors */
         CRT::init();
-
-        /* initialize system calls */
+	
+	/* initialize system calls */
         SYS::init();
-
-        /* initialize the thread module */
+        
+	/* initialize the thread module */
         threadsInit();
-
-        /* initialize LAPIC */
+        
+	/* initialize LAPIC */
         SMP::init(true);
         smpInitDone = true;
   

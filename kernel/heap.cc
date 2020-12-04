@@ -13,30 +13,85 @@
 /* Global Variables and Structures */
 /***********************************/
 
-#define MAX_ORDER       22
-#define MIN_ORDER       4   //2^4 = 16 bytes
-/* the order ranges 0..MAX_ORDER, the largest memblock is 2^(MAX_ORDER) */
-#define POOLSIZE        (1 << MAX_ORDER)
-/* blocks are of size 2^i */
-#define BLOCKSIZE(i)    (1 << (i))
-/* the address of the buddy of a block from freelists[i]. */
-#define _MEMBASE        ((uintptr_t)BUDDY->pool)
-#define _OFFSET(b)      ((uintptr_t)b - _MEMBASE)
-#define _BUDDYOF(b, i)  (_OFFSET(b) ^ (1 << (i)))
-#define BUDDYOF(b, i)   ((void*)( _BUDDYOF(b, i) + _MEMBASE))
-// not used yet, for higher order memory alignment
-#define ROUND4(x)       ((x % 4) ? (x / 4 + 1) * 4 : x)
-
 namespace rdanait {
 
-        static BlockingLock *theLock = nullptr;
+    static BlockingLock *theLock = nullptr;
+    struct TBlock {
+	TBlock* nextFree;
+	TBlock* self;
+	bool free;
+	int size;
+    };
 
-	typedef struct buddy {
-  	    void* freelist[MAX_ORDER + 2];  // one more slot for first block in pool
-            uint8_t pool[POOLSIZE];
-        } buddy_t;
+    TBlock* start;
+    int blocks;
+    int size;
+    TBlock* freeBlocks[22];
 
-	buddy_t* BUDDY = 0;
+    int powerOfTwo(int val) {
+	int i = 0;
+	while(val >>= 1) i++;
+	return i;
+    }
+
+    void addToList(TBlock* block, int i) {
+	if(!block) return;
+	block->nextFree = freeBlocks[i];
+	freeBlocks[i] = block;
+    }
+
+    void removeFromList(TBlock* block, int i) {
+	if(!block) return;
+	TBlock* temp = freeBlocks[i];
+	if(block == temp) {
+	    freeBlocks[i] = block->nextFree;
+	    return;
+        }
+	while(temp) {
+	    if(temp->nextFree == block) temp->nextFree = block->nextFree;
+	    temp = temp->nextFree;  
+	}
+    }
+
+    TBlock* divide(TBlock* block, int i) {
+        int size = ((block->size + sizeof(TBlock)) / 2) - sizeof(TBlock);
+        removeFromList(block, i);
+        block->free = true;
+        block->size = size;
+        block->self = block;
+        TBlock* buddy;
+        buddy = (TBlock*) ((uint8_t*)block + sizeof(TBlock) + size);
+        buddy->free = true;
+        buddy->size = size;
+        buddy->self = buddy;
+        addToList(buddy, 1 - i);
+        return block;
+    }
+
+    TBlock* findBuddy(TBlock* block, int i) {
+        long addr = ((uint8_t*) block - (uint8_t*) start);
+        return ((TBlock*)((addr ^= (1 << i)) + (size_t) start));
+    }
+
+    TBlock* merge(TBlock* block) {
+        TBlock* buddy;
+        int i = powerOfTwo(block->size + sizeof(TBlock));
+        buddy = findBuddy(block, i);
+        if(!buddy->free || buddy->size != block->size) return nullptr;
+        if(block > buddy) {
+            TBlock* x = block;
+            block = buddy;
+            buddy = x;
+        }
+        removeFromList(block, i);
+        removeFromList(buddy, i);
+        block->size = block->size * 2 + sizeof(TBlock);
+        block->free = true;
+        block->self = block;
+        addToList(block, i + 1);
+        return block;
+    }
+
 };
 
 
@@ -44,47 +99,46 @@ namespace rdanait {
 /* Heap Functions */
 /******************/
 
-void heapInit(void* start, size_t bytes) {
-
+void heapInit(void* startLoc, size_t bytes) {
     using namespace rdanait;
-    BUDDY->freelist[MAX_ORDER] = BUDDY->pool;
+    Debug::printf("bytes before: %d\n", bytes);
+    int p = powerOfTwo((int) bytes);
+    Debug::printf("p is: %d\n", p);
+    bytes = 1 << p;
+    Debug::printf("bytes after: %d\n", bytes);
+    start = (TBlock*) startLoc;
+    start->size = bytes - sizeof(TBlock);
+    Debug::printf("Start size is: %d\n", start->size);
+    start->free = true;
+    start->self = start;
+    blocks = 0;
+    size = start->size;
+    for(int i = 0; i < 22; i++) freeBlocks[i] = nullptr;
+    Debug::printf("initialized the free blocks\n");
+    addToList(start, p);
     theLock = new BlockingLock();
 }
 
 void* malloc(size_t bytes) {
     using namespace rdanait;
     LockGuardP g{theLock};
-
-    int i, order;
-    void* block;
-    void* buddy;
-
-    //calculate minimal order for this size
-    i = 0;
-    //one more byte for storing the order
-    while ((size_t) BLOCKSIZE(i) < bytes + 1) i++;
-
-    order = i = (i < MIN_ORDER) ? MIN_ORDER : i;
-
-    //level up until non-null list found
-    for (;; i++) {
-        if (i > MAX_ORDER) return nullptr;
-        if (BUDDY->freelist[i]) break;
-    }
-
-    //remove block from list
-    block = BUDDY->freelist[i];
-    BUDDY->freelist[i] = *(void**) BUDDY->freelist[i];
     
-    //split until i = order
-    while (i-- > order) {
-        buddy = BUDDYOF(block, i);
-	BUDDY->freelist[i] = buddy;
+    int i = powerOfTwo(size + sizeof(TBlock)) + 1;
+    Debug::printf("i is: %d\n", i);
+    while(!freeBlocks[i] && i < 32) i++;
+    if(i >= 32) return nullptr;
+    TBlock* temp;
+    temp = freeBlocks[i];
+    removeFromList(temp, i);
+    while((temp->size + sizeof(TBlock)) / 2 >= size + sizeof(TBlock)) {
+	temp = divide(temp, i);
+	i--;
     }
-
-    //store order in previous byte
-    *((uint8_t*) (block) - 1) = order;
-    return block;
+    temp->free = false;
+    temp->self = temp;
+    blocks++;
+    Debug::printf("return value is: %p\n", temp + 1);
+    return temp + 1;
 }
 
 void free(void* block) {
@@ -92,53 +146,21 @@ void free(void* block) {
     using namespace rdanait;
     LockGuardP g{theLock};
 
-    int i;
-    void* buddy;
-    void** p;
-
-    //fetch order in previous byte
-    i = *((uint8_t*) (block) - 1);
-
-    for (;; i++) {
-	buddy = BUDDYOF(block, i);
-	p = &(BUDDY->freelist[i]);
-	//find buddy in the list
-	while ((*p != nullptr) && (*p != buddy)) p = (void**) *p;
-	//if not found, insert into list
-	if (*p != buddy) {
-	    *(void**) block = BUDDY->freelist[i];
-	    BUDDY->freelist[i] = block;
-	    return;
+    TBlock* temp = (TBlock*)((uint8_t*) block - sizeof(TBlock));
+    if(temp->self == temp) {
+	temp->free = true;
+	addToList(temp, powerOfTwo(temp->size + sizeof(TBlock)));
+	while(temp) {
+	    if(temp->size == size) break;
+	    else temp = merge(temp);
 	}
-	else {
-	    //found, merge block starts from the lower one
-	    block = (block < buddy) ? block : buddy;
-	    //remove buddy from list
-	    *p = *(void**) *p;
-	}
-    }
-
-}
-
-int count_blocks(int i) {
-    using namespace rdanait;
-    int count = 0;
-    void** p = &(BUDDY->freelist[i]);
-
-    while (*p != nullptr) {
-	count++;
-	p = (void**) *p;
-    }	
-
-    return count;
+	blocks--;
+    } 
 }
 
 int spaceUnallocated() {
     using namespace rdanait;
     int totSize = 0;
-    for(int i = 0; i <= MAX_ORDER; i++) {
-	totSize += count_blocks(i) * BLOCKSIZE(i);
-    }
 
     return totSize;
 }
