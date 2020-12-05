@@ -26,7 +26,7 @@ namespace rdanait {
     TBlock* start;
     int blocks;
     int size;
-    TBlock* freeBlocks[32];
+    TBlock* freeBlocks[22];
 
     int powerOfTwo(int val) {
 	int i = 0;
@@ -102,17 +102,14 @@ namespace rdanait {
 void heapInit(void* startLoc, size_t bytes) {
     using namespace rdanait;
     int p = powerOfTwo((int) bytes);
-    Debug::printf("p is: %d\n", p);
     bytes = 1 << p;
-    Debug::printf("bytes is: %d\n", bytes);
     start = (TBlock*) startLoc;
     start->size = bytes - sizeof(TBlock);
-    Debug::printf("start size is: %d\n", start->size);
     start->free = true;
     start->self = start;
     blocks = 0;
     size = start->size;
-    for(int i = 0; i < 32; i++) freeBlocks[i] = nullptr;
+    for(int i = 0; i < 22; i++) freeBlocks[i] = nullptr;
     addToList(start, p);
     theLock = new BlockingLock();
 }
@@ -122,12 +119,10 @@ void* malloc(size_t bytes) {
     LockGuardP g{theLock};
      
     int i = powerOfTwo(bytes + sizeof(TBlock)) + 1;
-    //Debug::printf("i is: %d\n", i);
-    while(!freeBlocks[i] && i < 32) i++;
-    if(i > 32) return nullptr;
+    while(!freeBlocks[i] && i < 22) i++;
+    if(i > 22) return nullptr;
     TBlock* temp;
     temp = freeBlocks[i];
-    //Debug::printf("temp is: %p\n", temp);
     removeFromList(temp, i);
     while((temp->size + sizeof(TBlock)) / 2 >= bytes + sizeof(TBlock)) {
 	temp = divide(temp, i);
@@ -136,7 +131,6 @@ void* malloc(size_t bytes) {
     temp->free = false;
     temp->self = temp;
     blocks++;
-    //Debug::printf("Return pointer is %p\n", temp + 1);
     return temp + 1;
 }
 
@@ -160,7 +154,10 @@ void free(void* block) {
 int spaceUnallocated() {
     using namespace rdanait;
     int totSize = 0;
-
+    for(int i = 0; i < 22; i++) {
+	TBlock* temp = freeBlocks[i];
+	if(temp != nullptr) totSize += temp->size;
+    }
     return totSize;
 }
 
