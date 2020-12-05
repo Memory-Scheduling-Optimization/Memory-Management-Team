@@ -201,9 +201,9 @@ void thread(T work) {
 template <typename T>
 void thread(Shared<PCB> pcb, T work) {
     using namespace gheith;
-
+    
     delete_zombies();
-
+    
     auto tcb = new TCBImpl<T>(pcb, work);
     schedule(tcb);
 }

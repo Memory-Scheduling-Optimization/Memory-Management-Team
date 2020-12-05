@@ -26,7 +26,7 @@ namespace rdanait {
     TBlock* start;
     int blocks;
     int size;
-    TBlock* freeBlocks[22];
+    TBlock* freeBlocks[32];
 
     int powerOfTwo(int val) {
 	int i = 0;
@@ -64,7 +64,7 @@ namespace rdanait {
         buddy->free = true;
         buddy->size = size;
         buddy->self = buddy;
-        addToList(buddy, 1 - i);
+        addToList(buddy, i - 1);
         return block;
     }
 
@@ -101,20 +101,18 @@ namespace rdanait {
 
 void heapInit(void* startLoc, size_t bytes) {
     using namespace rdanait;
-    Debug::printf("bytes before: %d\n", bytes);
     int p = powerOfTwo((int) bytes);
     Debug::printf("p is: %d\n", p);
     bytes = 1 << p;
-    Debug::printf("bytes after: %d\n", bytes);
+    Debug::printf("bytes is: %d\n", bytes);
     start = (TBlock*) startLoc;
     start->size = bytes - sizeof(TBlock);
-    Debug::printf("Start size is: %d\n", start->size);
+    Debug::printf("start size is: %d\n", start->size);
     start->free = true;
     start->self = start;
     blocks = 0;
     size = start->size;
-    for(int i = 0; i < 22; i++) freeBlocks[i] = nullptr;
-    Debug::printf("initialized the free blocks\n");
+    for(int i = 0; i < 32; i++) freeBlocks[i] = nullptr;
     addToList(start, p);
     theLock = new BlockingLock();
 }
@@ -122,22 +120,23 @@ void heapInit(void* startLoc, size_t bytes) {
 void* malloc(size_t bytes) {
     using namespace rdanait;
     LockGuardP g{theLock};
-    
-    int i = powerOfTwo(size + sizeof(TBlock)) + 1;
-    Debug::printf("i is: %d\n", i);
+     
+    int i = powerOfTwo(bytes + sizeof(TBlock)) + 1;
+    //Debug::printf("i is: %d\n", i);
     while(!freeBlocks[i] && i < 32) i++;
-    if(i >= 32) return nullptr;
+    if(i > 32) return nullptr;
     TBlock* temp;
     temp = freeBlocks[i];
+    //Debug::printf("temp is: %p\n", temp);
     removeFromList(temp, i);
-    while((temp->size + sizeof(TBlock)) / 2 >= size + sizeof(TBlock)) {
+    while((temp->size + sizeof(TBlock)) / 2 >= bytes + sizeof(TBlock)) {
 	temp = divide(temp, i);
 	i--;
     }
     temp->free = false;
     temp->self = temp;
     blocks++;
-    Debug::printf("return value is: %p\n", temp + 1);
+    //Debug::printf("Return pointer is %p\n", temp + 1);
     return temp + 1;
 }
 

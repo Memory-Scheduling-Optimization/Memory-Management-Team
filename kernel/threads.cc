@@ -32,7 +32,7 @@ namespace gheith {
 
     void delete_zombies() {
         while (true) {
-            auto it = zombies.remove();
+	    auto it = zombies.remove();
             if (it == nullptr) return;
             delete it;
         }

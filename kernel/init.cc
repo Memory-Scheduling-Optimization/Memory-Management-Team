@@ -158,7 +158,7 @@ extern "C" void kernelInit(void) {
 
     auto myOrder = howManyAreHere.add_fetch(1);
     if (myOrder == kConfig.totalProcs) {
-        thread([] {
+	thread([] {
             kernelMain();
             Debug::shutdown();
         });

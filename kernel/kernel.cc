@@ -90,8 +90,8 @@ void kernelMain(void) {
 
     Debug::printf("\n");
 
-    Debug::printf("Memory utilization calculation\n");
-    memUtil();
+    //Debug::printf("Memory utilization calculation\n");
+    //memUtil();
 
 }
 
