@@ -20,7 +20,7 @@ void memUtil(void);
 void kernelMain(void) {
 
     Debug::printf("Start of Timing test\n");
-    int number_of_millions = 10; // 10 --> 10 million (1 of 10 mils)
+    int number_of_millions = 10; // 10 --> 1 million (1 of 10 mils)
 
     for (int i = 0; i < 1 * number_of_millions; i++) { // i = 100 for 10 million
         doTimingTest();
@@ -34,23 +34,16 @@ void doTimingTest() {
 
     for (uint32_t i = 0; i < 100000; i++) {
 	int temp = (r->next() % 32);
-//	if (i < 1000) Debug::printf("i: %d, temp: %d\n", i, temp);
         arr[i] = (int*)malloc(temp + 1);
     }
-    memUtil();
-//    print_slab_lists();
-//    sanity_checker();
-//    Debug::panic("...\n");
+    //memUtil();
     for (uint32_t i = 0; i < 100000; i++) {
-//	Debug::printf("i: %d\n", i);
-	//if (i == 503) malloc(0); // temp print heap
         free(arr[i]);
     }
     
     free(arr);
     delete(r);
-    memUtil();
-    //Debug::printf("Reached here \n");
+    //memUtil();
 }
 
 template <typename Work>

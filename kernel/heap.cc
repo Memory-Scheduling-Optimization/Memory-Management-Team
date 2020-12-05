@@ -578,10 +578,8 @@ Header* is_in_slab (void* p) {
     
     for (int i = 0; i < 4; i++) {
 	Header* cur = slabs[i];
-  //      if(((uint32_t)p) == 0x5972f4) Debug::printf("made it here, i: %d, cur: %x\n", i, cur); // temp 
         while (cur != nullptr) {
 	    Slab* slb = (Slab*) cur;
-//	    if(((uint32_t)p) == 0x5972f4) print_slab(slb);
 	    if (p >= slb->get_blocks_start() && p < slb->get_blocks_end()) { // get_blocks_end() is exclusive
 	        // found the slab that it belongs to
 		return cur;
@@ -610,7 +608,6 @@ void undo_slab (Header* slab, void* p) {
 	    }
 	    if (cur == slab) { // first node case
 		// still need to do a free:
-//		Debug::printf("AAAAAAAAA\n");
 		slabs[i] = (((Slab*)slabs[i])->next);
 		nolock_free(ptr_add(slab, 4)); // same thing as before with free issue maybe
 	        return;
@@ -619,12 +616,11 @@ void undo_slab (Header* slab, void* p) {
                 cur = ((Slab*)cur)->next;
 	    }
 	    // so cur's next is slab
-//	    Debug::printf("BBBBBBB %p, %p, %p\n", slab, cur, ((Slab*)cur)->next);
 	    s = (Slab*) cur;
 	    ASSERT(s->next == slab);
 	    s->next = ((Slab*)(s->next))->next;
 	    nolock_free(ptr_add(slab, 4)); // since the node is removed from the free list, we can just remove it from the heap by using free() <-- expects 4+ ptr
-	    return; // ^^
+	    return; 
         }
     }
 }
@@ -643,8 +639,6 @@ void heapInit(void* base, size_t bytes) {
     heap_size = round_down_mult_four(bytes);
     //Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
     heap_end = ptr_add((void*) heap_start, heap_size);
-
-   // if (heap_size >= MIN_NODE_SIZE) { // if there is room for anything in the heap
         Header* middle_node = (Header*)heap_start;
         middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
         middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
@@ -654,7 +648,6 @@ void heapInit(void* base, size_t bytes) {
         start_slabbing(8);
         start_slabbing(12);	
 	start_slabbing(16);
-   // }
     //print_heap();
     //sanity_checker();
     //do_small_unit_tests();
@@ -714,31 +707,22 @@ void* malloc(size_t bytes) { //using best fit policy
     LockGuardP g{heap_lock};
     //sanity_checker();
     //print_heap();
-    if (bytes == 0) {// temp 
-        print_heap();
-    }
     bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
-//    if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
-//        bytes = MIN_BLOCK_SIZE; // for the minimum block size, so round up 4 & 8 to 12.
-//    }
     if (bytes == 0) {// malloc(0) special case
         return ptr_add(heap_end, 4); // returns out of bounds pointer.
     }
-    if (bytes < MIN_BLOCK_SIZE || bytes == 12 || bytes == 16) { // making slab nodes for malloc(4) and malloc(8) cases... for now
+    if (bytes < MIN_BLOCK_SIZE || bytes == 12 || bytes == 16) { // making slab nodes for malloc(4), malloc(8), malloc(12), malloc(16)  cases... for now
         return do_slab(bytes);
     }
     if (bytes > (heap_size - NODE_OVERHEAD)) { // because heap_size is actually an overestimation already (since header + footer)
         return nullptr;
     }
-    //Header* current_node = avail_list;
     Header* best_fit_node = get_best_fit((int32_t) bytes);
-    //Debug::printf("bytes: %d, got best fit: %p and it has footer: %p\n", bytes, best_fit_node, best_fit_node->get_footer());
     if (best_fit_node == nullptr) return nullptr;
     
     if (abs(best_fit_node->size_and_state) >= (ssize_t)(MIN_BLOCK_SIZE + bytes + 8)) { // leftover header & footer from old node + min_block_size needed for new free node + len(new allocated node)=8+bytes,
         int32_t leftover_bytes = abs(best_fit_node -> size_and_state) + 8 - bytes - 8 - 8;
 	ASSERT(leftover_bytes >= 8); // leftover_bytes >= 8, still, by algebra
-	//Debug::printf("leftover_bytes: %d\n", leftover_bytes);
         Header* new_header = (Header*)ptr_add(best_fit_node->get_footer(), get_negative(bytes + 4)); // this indicates we malloc from RHS
         new_header->size_and_state = bytes; // bytes > 0
         new_header->get_footer()->size_and_state = bytes;
@@ -764,7 +748,7 @@ void* malloc(size_t bytes) { //using best fit policy
 void nolock_free(void* p) {
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
-    if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing TODO consider !node->is_allocated() check w/ slabs
+    if (p < heap_start || p >= heap_end || ((int32_t)(p)) % 4 != 0) { // cases where free will do nothing
         return;
     }
     Header* p_slab = is_in_slab(p);
@@ -772,6 +756,10 @@ void nolock_free(void* p) {
     if (p_slab != nullptr) { // if p is in some slab node
         undo_slab(p_slab, p);
         return;
+    }
+
+        if (!node->is_allocated()) {
+        return; // double free...
     }
 
     Header* left_node = (node -> get_left_footer() < heap_start) ? nullptr : node->get_left_footer()->get_header();
@@ -820,16 +808,18 @@ void free(void* p) {
     //print_tree(avail_list);
     Header* node = (Header*)ptr_add(p, -4); // because user gives the pointer that is the start of the block
 
-    if (p < heap_start || p > heap_end || ((int32_t)(p)) % 4 != 0 || !node->is_allocated()) { // cases where free will do nothing TODO consider !node->is_allocated() check w/ slabs
+    if (p < heap_start || p >= heap_end || ((int32_t)(p)) % 4 != 0) { // cases where free will do nothing 
         return;
     }
-//    if(((uint32_t)p) == 0x5972f4) Debug::printf("made it here 0 \n"); // temp
-    Header* p_slab = is_in_slab(p); // PROBLEM
-//    if(((uint32_t)p) == 0x5972f4) Debug::printf("made it here\n"); // temp
+    Header* p_slab = is_in_slab(p); 
 
     if (p_slab != nullptr) { // if p is in some slab node
         undo_slab(p_slab, p);
 	return;	
+    }
+
+    if (!node->is_allocated()) {
+        return; // double free... 
     }
 
     Header* left_node = (node -> get_left_footer() < heap_start) ? nullptr : node->get_left_footer()->get_header();
