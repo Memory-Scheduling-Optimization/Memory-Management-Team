@@ -18,6 +18,7 @@ void memUtil(void);
 
 void doGroupAllocation(void);
 void doRandomAllocation(void);
+void doRandomGroupAllocation(void);
 
 void kernelMain(void) {
 
@@ -40,6 +41,12 @@ void kernelMain(void) {
     //     doRandomAllocation();
     // }
     // Debug::printf("End of Random test\n");
+
+    Debug::printf("Start of Random Group test\n");
+    for (int i = 0; i < 100; i++) {
+        doRandomGroupAllocation();
+    }
+    Debug::printf("End of Random Group test\n");
 }
 
 void doTimingTest() {
@@ -91,6 +98,39 @@ void doRandomAllocation() {
         if ((r->next() % 2) == 0) {
             free(arr[i]);
             arr[i] = 0;
+        }
+    }
+
+    // memUtil();
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        if (arr[i] != 0)
+            free(arr[i]);
+    }
+
+    free(arr);
+    delete(r);
+}
+
+void doRandomGroupAllocation() {
+    uint32_t groupsize = 100000;
+    uint32_t minigroupsize = 1000;
+    uint32_t groupnum = 100;
+
+    int** arr = new int*[groupsize];
+    auto r = new Random(3487);
+
+    uint32_t index = 0;
+    for (uint32_t i = 0; i < groupnum; i++) {
+        for (uint32_t ingroup = 0; ingroup < minigroupsize; ingroup++) {
+            arr[index] = (int*)malloc((r->next() % 32) + 1);
+            index++;
+        }
+        if ((r->next() % 2) == 0) {
+            for (uint32_t removegroup = index - minigroupsize; removegroup < index; removegroup++) {
+                free(arr[removegroup]);
+                arr[removegroup] = 0;
+            }
         }
     }
 
