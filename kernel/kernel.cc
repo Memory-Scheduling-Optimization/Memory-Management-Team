@@ -1,3 +1,4 @@
+/*
 #include "stdint.h"
 #include "debug.h"
 #include "shared.h"
@@ -41,7 +42,7 @@ void doSpeedTest(void);
 void memUtil(void);
 
 void kernelMain(void) {
-    /*
+    
     Debug::printf("\n");
     Debug::printf("Start of simple stress/correctness tests\n");
     Debug::printf("Test 1\n");
@@ -94,7 +95,7 @@ void kernelMain(void) {
     Debug::printf("End of simple stress/correctness tests\n");
     
     Debug::printf("\n");
-    */
+    
     Debug::printf("Start of efficiency test\n");
     doEfficiencyTest();
     Debug::printf("End of efficiency test\n");
@@ -112,10 +113,10 @@ void kernelMain(void) {
     Debug::printf("End of speed test\n");
 
     Debug::printf("\n");
-    /*
+    
     Debug::printf("Memory utilization calculation\n");
     memUtil();
-    */
+    
 }
 
 void doEfficiencyTest() {
@@ -202,4 +203,175 @@ void memUtil() {
     double heapSize = 5 * 1024 * 1024;
     double totalAmountUnallocated = spaceUnallocated();
     Debug::printf("*** Memory utilized = %f%%\n", ((heapSize - totalAmountUnallocated)/heapSize)*100);   
+}*/
+
+#include "stdint.h"
+#include "debug.h"
+#include "random.h"
+#include "shared.h"
+#include "threads.h"
+#include "ext2.h"
+#include "elf.h"
+#include "vmm.h"
+#include "process.h"
+#include "barrier.h"
+#include "sys.h"
+#include "pit.h"
+
+void doTimingTest(void);
+void doSpeedTest(void);
+void doTimingSpeedTest(void);
+void memUtil(void);
+
+void doGroupAllocation(void);
+void doRandomAllocation(void);
+void doRandomGroupAllocation(void);
+
+void kernelMain(void) {
+
+    Debug::printf("Start of Timing test\n");
+    //for (int i = 0; i < 100; i++) {
+        doTimingTest();
+    //}
+    Debug::printf("End of Timing test\n");
+
+
+    // Debug::printf("Start of Group test\n");
+    // for (int i = 0; i < 10000; i++) {
+    //     doGroupAllocation();
+    // }
+    // Debug::printf("End of Group test\n");
+
+
+    Debug::printf("Start of Random test\n");
+    // for (int i = 0; i < 100; i++) {
+        doRandomAllocation();
+    // }
+    Debug::printf("End of Random test\n");
+
+    Debug::printf("Start of Random Group test\n");
+    //for (int i = 0; i < 100; i++) {
+        doRandomGroupAllocation();
+    //}
+    Debug::printf("End of Random Group test\n");
+}
+
+void doTimingTest() {
+    int** arr = new int*[100000];
+    auto r = new Random(3487);
+
+    for (uint32_t i = 0; i < 100000; i++) {
+        arr[i] = (int*)malloc((r->next() % 32) + 1);
+    }
+    memUtil();
+
+    for (uint32_t i = 0; i < 100000; i++) {
+        free(arr[i]);
+    }
+
+    free(arr);
+    delete(r);
+    // memUtil();
+}
+
+void doGroupAllocation() {
+    uint32_t groupsize = 1000;
+
+    int** arr = new int*[groupsize];
+    auto r = new Random(3487);
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        arr[i] = (int*)malloc((r->next() % 32) + 1);
+    }
+
+    // memUtil();
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        free(arr[i]);
+    }
+
+    free(arr);
+    delete(r);
+}
+
+void doRandomAllocation() {
+    uint32_t groupsize = 100000;
+
+    int** arr = new int*[groupsize];
+    auto r = new Random(3487);
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        arr[i] = (int*)malloc((r->next() % 32) + 1);
+        if ((r->next() % 2) == 0) {
+            free(arr[i]);
+            arr[i] = 0;
+        }
+    }
+
+    memUtil();
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        if (arr[i] != 0)
+            free(arr[i]);
+    }
+
+    free(arr);
+    delete(r);
+}
+
+void doRandomGroupAllocation() {
+    uint32_t groupsize = 100000;
+    uint32_t minigroupsize = 1000;
+    uint32_t groupnum = 100;
+
+    int** arr = new int*[groupsize];
+    auto r = new Random(3487);
+
+    uint32_t index = 0;
+    for (uint32_t i = 0; i < groupnum; i++) {
+        for (uint32_t ingroup = 0; ingroup < minigroupsize; ingroup++) {
+            arr[index] = (int*)malloc((r->next() % 32) + 1);
+            index++;
+        }
+        if ((r->next() % 2) == 0) {
+            for (uint32_t removegroup = index - minigroupsize; removegroup < index; removegroup++) {
+                free(arr[removegroup]);
+                arr[removegroup] = 0;
+            }
+        }
+    }
+
+    memUtil();
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        if (arr[i] != 0)
+            free(arr[i]);
+    }
+
+    free(arr);
+    delete(r);
+}
+
+
+template <typename Work>
+uint32_t howLong(Work work) {
+    uint32_t start = Pit::jiffies;
+    work();
+    return (Pit::jiffies - start);
+}
+
+void doTimingSpeedTest() {
+    //Speed test calls large stress test
+    auto x = howLong([] {
+	doTimingTest();
+    });
+
+    Debug::printf("*** Time taken for big malloc timing test: %d\n", x);
+
+}
+
+void memUtil() {
+    double heapSize = 5 * 1024 * 1024;
+    double totalAmountUnallocated = spaceUnallocated();
+    Debug::printf("*** Memory utilized = %f%%\n", ((heapSize - totalAmountUnallocated)/heapSize)*100);
 }
