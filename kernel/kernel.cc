@@ -16,38 +16,31 @@ void doSpeedTest(void);
 void doTimingSpeedTest(void);
 void memUtil(void);
 
+void doGroupAllocation(void);
+void doRandomAllocation(void);
+
 void kernelMain(void) {
 
-    Debug::printf("Start of Timing test\n");
-    for (int i = 0; i < 100; i++) {
-        doTimingTest();
-    }
-    Debug::printf("End of Timing test\n");
-
-    // Debug::printf("Start of Increasing Timing test\n");
-    // for (int i = 0; i < 10000; i++) {
-    //     doIncreasingTimingTest();
+    // Debug::printf("Start of Timing test\n");
+    // for (int i = 0; i < 100; i++) {
+    //     doTimingTest();
     // }
-    // Debug::printf("End of Increasing Timing test\n");
+    // Debug::printf("End of Timing test\n");
+
+
+    // Debug::printf("Start of Group test\n");
+    // for (int i = 0; i < 10000; i++) {
+    //     doGroupAllocation();
+    // }
+    // Debug::printf("End of Group test\n");
+
+
+    // Debug::printf("Start of Random test\n");
+    // for (int i = 0; i < 100; i++) {
+    //     doRandomAllocation();
+    // }
+    // Debug::printf("End of Random test\n");
 }
-
-// void doTimingTest() {
-//     int** arr = new int*[100000];
-
-//     for (uint32_t i = 0; i < 100000; i++) {
-//         arr[i] = (int*)malloc(4);
-//     }
-//     // memUtil();
-
-//     for (uint32_t i = 0; i < 100000; i++) {
-//         free(arr[i]);
-//     }
-    
-//     free(arr);
-
-//     // memUtil();
-//     // Debug::printf("\n");
-// }
 
 void doTimingTest() {
     int** arr = new int*[100000];
@@ -56,7 +49,7 @@ void doTimingTest() {
     for (uint32_t i = 0; i < 100000; i++) {
         arr[i] = (int*)malloc((r->next() % 32) + 1);
     }
-    memUtil();
+    // memUtil();
 
     for (uint32_t i = 0; i < 100000; i++) {
         free(arr[i]);
@@ -65,7 +58,51 @@ void doTimingTest() {
     free(arr);
     delete(r);
     // memUtil();
-    // Debug::printf("\n");
+}
+
+void doGroupAllocation() {
+    uint32_t groupsize = 1000;
+
+    int** arr = new int*[groupsize];
+    auto r = new Random(3487);
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        arr[i] = (int*)malloc((r->next() % 32) + 1);
+    }
+
+    // memUtil();
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        free(arr[i]);
+    }
+
+    free(arr);
+    delete(r);
+}
+
+void doRandomAllocation() {
+    uint32_t groupsize = 100000;
+
+    int** arr = new int*[groupsize];
+    auto r = new Random(3487);
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        arr[i] = (int*)malloc((r->next() % 32) + 1);
+        if ((r->next() % 2) == 0) {
+            free(arr[i]);
+            arr[i] = 0;
+        }
+    }
+
+    // memUtil();
+
+    for (uint32_t i = 0; i < groupsize; i++) {
+        if (arr[i] != 0)
+            free(arr[i]);
+    }
+
+    free(arr);
+    delete(r);
 }
 
 
