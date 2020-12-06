@@ -36,14 +36,14 @@ void doTimingTest() {
 	int temp = (r->next() % 32);
         arr[i] = (int*)malloc(temp + 1);
     }
-    //memUtil();
+    memUtil();
     for (uint32_t i = 0; i < 100000; i++) {
         free(arr[i]);
     }
     
     free(arr);
     delete(r);
-    //memUtil();
+    memUtil();
 }
 
 template <typename Work>
