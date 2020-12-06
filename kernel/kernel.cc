@@ -68,4 +68,3 @@ void memUtil() {
     double totalAmountUnallocated = spaceUnallocated();
     Debug::printf("*** Memory utilized = %f%%\n", ((heapSize - totalAmountUnallocated)/heapSize)*100);   
 }
-
