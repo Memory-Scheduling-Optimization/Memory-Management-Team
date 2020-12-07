@@ -11,6 +11,8 @@ static constexpr uint32_t HEAP_HEAP_SIZE = 5 * 1024 * 1024;
 static constexpr uint32_t ARENA_SIZE = 512 * 1024;
 static constexpr uint32_t ARENA_MASK = 0x7FFFF;
 
+uint32_t hashPtr(uint32_t x);
+
 namespace gheith {
 
 // Start of free list
@@ -149,7 +151,7 @@ int* findFit(int size) {
 
 void updateFree(void* p) {
     // Check if p is already free
-    if ((*(((int*)p) - 1) & 1) == 0) {
+    if (*(((uint32_t*)p) - 1) != (hashPtr((uint32_t)p) + 1)) {
         Debug::printf("WE HAVE A DOUBLE FREE %x\n", p);
         return;
     }
@@ -157,7 +159,7 @@ void updateFree(void* p) {
     else {
         // Update malloc block header to be free
         int* p_temp = ((int*) p) - 1;
-        *p_temp = *p_temp & ~0x1;
+        *p_temp = *p_temp - 1;
 
         // Update arena block num allocated
         Header* arena_temp = ((Header*)((int)p & ~ARENA_MASK));
@@ -195,7 +197,13 @@ int freeListSpace() {
 
 };
 
-
+uint32_t hashPtr(uint32_t x) {
+    int n = 12;
+    do
+        x = ((x >> 8) ^ x) * 0x6B + n;
+    while (--n != 0);
+    return x;
+}
 
 void heapInit(void* base, size_t bytes) {
     using namespace gheith;
@@ -228,7 +236,14 @@ void* malloc(size_t bytes) {
         return 0;
     }
 
-    return (void*) findFit(alloc_size);
+    uint32_t* temp = (uint32_t*) findFit(alloc_size);
+    
+    if (temp != nullptr) {
+        uint32_t hash = hashPtr((uint32_t)temp);
+        *(temp - 1) = hash + 1;
+        
+    }
+    return temp;
 }
 
 void free(void* p) {
