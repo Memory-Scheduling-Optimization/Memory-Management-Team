@@ -288,7 +288,6 @@ int spaceUnallocated() {
 	totSpace += abs(currentFreeNode -> sizeOfNode);
 	currentFreeNode = currentFreeNode -> nextNode;
     }
-    Debug::printf("Total unallocated space: %d\n", totSpace);
     return totSpace;
 }
 
