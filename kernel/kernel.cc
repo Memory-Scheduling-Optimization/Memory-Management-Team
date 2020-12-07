@@ -21,6 +21,8 @@ void doGroupAllocation(void);
 void doRandomAllocation(void);
 void doRandomGroupAllocation(void);
 
+void doIncorrectMalloc(void);
+
 void kernelMain(void) {
 
     // Debug::printf("Start of Timing test\n");
@@ -45,15 +47,18 @@ void kernelMain(void) {
     // }
     // Debug::printf("End of Random test\n");
 
-    doTimingTest();
-    Debug::printf("Start of Timing test\n");
-    doTimingTest();
 
-    Debug::printf("\nStart of Random test\n");
-    doRandomAllocation();
+    // doTimingTest();
+    // Debug::printf("Start of Timing test\n");
+    // doTimingTest();
 
-    Debug::printf("\nStart of Random Group test\n");
-    doRandomGroupAllocation();
+    // Debug::printf("\nStart of Random test\n");
+    // doRandomAllocation();
+
+    // Debug::printf("\nStart of Random Group test\n");
+    // doRandomGroupAllocation();
+
+    doIncorrectMalloc();
 }
 
 void doTimingTest() {
@@ -151,6 +156,21 @@ void doRandomGroupAllocation() {
 
     free(arr);
     delete(r);
+}
+
+void doIncorrectMalloc() {
+    int* allocated = (int*)malloc(365);
+    allocated[0] = 0x3452;
+    allocated[1] = 0x4576;
+
+    free(allocated + 1);
+    if (allocated[0] == 0x3452 && allocated[1] == 0x4576) {
+        Debug::printf("Incorrect malloc test passed\n");
+    } else {
+        Debug::printf("Incorrect malloc test failed\n");
+    }
+
+    free(allocated);
 }
 
 template <typename Work>

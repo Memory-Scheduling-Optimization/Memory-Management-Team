@@ -152,7 +152,8 @@ int* findFit(int size) {
 void updateFree(void* p) {
     // Check if p is already free
     if (*(((uint32_t*)p) - 1) != (hashPtr((uint32_t)p) + 1)) {
-        Debug::printf("WE HAVE A DOUBLE FREE %x\n", p);
+        // Debug::printf("WE HAVE A DOUBLE FREE %x\n", p);
+        Debug::printf("We have an invalid free\n");
         return;
     }
     // Is allocated, update to be free
@@ -249,6 +250,8 @@ void* malloc(size_t bytes) {
 void free(void* p) {
     using namespace gheith;
     if (p == 0) return;
+    if ((uint32_t)p < HEAP_HEAP_START || (uint32_t)p > HEAP_HEAP_START + HEAP_HEAP_SIZE)
+        return;
     // if (p == (void*) array) return;
 
     LockGuardP g{theLock};
