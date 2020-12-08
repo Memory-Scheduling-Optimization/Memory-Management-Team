@@ -509,23 +509,12 @@ void do_slab_unit_tests() {
     print_heap();
     print_slab((Slab*) slabs[0]);
 
-    /*
-    for (int i = 0; i < 31; i++) {
-        void* p2 = malloc(4);
-        print_heap();
-        print_slab((Slab*) slabs[0]);
-        Debug::printf("in loop, i: %d, p2: %x\n", i, p2);
-    }
-    Debug::printf("\n\n");
-    print_slab((Slab*) slabs[0]);
-    print_slab((Slab*)(((Slab*) slabs[0]) -> next));
-    */
     Debug::panic("End. In do_slab_unit_tests()\n");
 }
 
 Slab* make_slab (uint32_t block_size, uint32_t init_bitmap, Header* next_node) {
     int32_t total_slab_size = 32 * block_size + 8;
-    void* temp = nolock_malloc(total_slab_size); // OH FUCK
+    void* temp = nolock_malloc(total_slab_size); 
     if (temp == nullptr) { // because the + 4 bytes
         return nullptr; // failed to make a slab node because heap didn't have the room for it. 
     }
@@ -544,7 +533,6 @@ Slab* make_slab (uint32_t block_size, uint32_t init_bitmap, Header* next_node) {
 // so total-slab-size = 32*bytes + 16B
 void* do_slab (size_t bytes) {
     ASSERT(bytes % 4 == 0 && bytes >= 4); // assert that bytes is in bounds
-//    int32_t total_slab_size = 32 * bytes + 8; // 8 because 4 for bitmap and 4 for next
     
     for (int i = 0; i < 4; i++) { // max 4 slab lists for now
         Header* cur = slabs[i];
@@ -632,22 +620,20 @@ void start_slabbing(uint32_t amount) {
     slabs[num_slab_lists++] = (Header*) make_slab(amount, 0x1, nullptr);
 }
 
-// TODO: impl stop_slabbing ??
 
 void heapInit(void* base, size_t bytes) {
     heap_start = round_up_mult_four(base);
     heap_size = round_down_mult_four(bytes);
     //Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
     heap_end = ptr_add((void*) heap_start, heap_size);
-        Header* middle_node = (Header*)heap_start;
-        middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
-        middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
-        add_to_tree(middle_node);
-
-        start_slabbing(4);
-        start_slabbing(8);
-        start_slabbing(12);	
-	start_slabbing(16);
+    Header* middle_node = (Header*)heap_start;
+    middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
+    middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
+    add_to_tree(middle_node);
+    start_slabbing(4);
+    start_slabbing(8);
+    start_slabbing(12);	
+    start_slabbing(16);
     //print_heap();
     //sanity_checker();
     //do_small_unit_tests();
@@ -657,9 +643,6 @@ void heapInit(void* base, size_t bytes) {
 
 void* nolock_malloc(size_t bytes) { //using best fit policy
     bytes = round_up_mult_four(bytes); // extra bytes if mallocing an amount that is not a multiple of four
-//    if (bytes >= 4 && bytes < MIN_BLOCK_SIZE) {
-//        bytes = MIN_BLOCK_SIZE; // for the minimum block size, so round up 4 & 8 to 12.
-//    }
     if (bytes == 0) {// malloc(0) special case
         return ptr_add(heap_end, 4); // returns out of bounds pointer.
     }
@@ -669,7 +652,6 @@ void* nolock_malloc(size_t bytes) { //using best fit policy
     if (bytes > (heap_size - NODE_OVERHEAD)) { // because heap_size is actually an overestimation already (since header + footer)
         return nullptr;
     }
-    //Header* current_node = avail_list;
     Header* best_fit_node = get_best_fit((int32_t) bytes);
     //Debug::printf("bytes: %d, got best fit: %p and it has footer: %p\n", bytes, best_fit_node, best_fit_node->get_footer());
     if (best_fit_node == nullptr) return nullptr;
