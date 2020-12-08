@@ -525,7 +525,7 @@ void do_slab_unit_tests() {
 
 Slab* make_slab (uint32_t block_size, uint32_t init_bitmap, Header* next_node) {
     int32_t total_slab_size = 32 * block_size + 8;
-    void* temp = nolock_malloc(total_slab_size, true); // OH FUCK
+    void* temp = nolock_malloc(total_slab_size, true); 
     if (temp == nullptr) { // because the + 4 bytes
         return nullptr; // failed to make a slab node because heap didn't have the room for it. 
     }
@@ -728,13 +728,12 @@ void init_normal_pointers() {
 void heapInit(void* base, size_t bytes) {
     heap_start = round_up_mult_four(base);
     heap_size = round_down_mult_four(bytes);
-    Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
+    // Debug::printf("heap_start: %d, heap_size: %d \n", heap_start, heap_size);
     heap_end = ptr_add((void*) heap_start, heap_size);
     Header* middle_node = (Header*)heap_start;
     middle_node->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
     middle_node->get_footer()->size_and_state = get_negative(heap_size - NODE_OVERHEAD);
     add_to_tree(middle_node);
-    Debug::printf("0000000\n");    
     init_normal_pointers(); 
     start_slabbing(4);
     start_slabbing(8);
@@ -744,12 +743,9 @@ void heapInit(void* base, size_t bytes) {
     //sanity_checker();
     //do_small_unit_tests();
     //do_slab_unit_tests();
-    Debug::printf("YYYYYYYYYYY\n");
     heap_lock = new BlockingLock();
-    Debug::printf("XXXXXXXXXXXXXXXXXXXXX\n"); // <--- bug this doesn't print.
-/*    Debug::printf("XXXXXXXXXXXX\n");
+/*  
     normal_pointers = new small_node*[NP_SIZE];
-    Debug::printf("skjfghdyusfgudk \n");
     for (int i = 0; i < NP_SIZE; i++) normal_pointers[i] = nullptr; // NN? */
 }
 
@@ -917,10 +913,6 @@ void free(void* p) {
     bool is_normal = remove_from_normal_pointers(p);
     if (! is_normal) {
         Header* p_slab = is_in_slab(p);
-	if (p_slab == nullptr) {
-	    print_heap();
-            Debug::printf("in free(), p: %p", p);
-	}
 	ASSERT(p_slab != nullptr);
         undo_slab(p_slab, p);
         return;
